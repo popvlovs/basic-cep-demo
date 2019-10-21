@@ -21,3 +21,4 @@ out/**
 env.yml
 **/application.yml
 **/logback.xml
+!src/main/resources/*
