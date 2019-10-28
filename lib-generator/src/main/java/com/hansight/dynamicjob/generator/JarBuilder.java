@@ -85,15 +85,22 @@ public class JarBuilder {
         ClassLoader classLoader = JarBuilder.class.getClassLoader();
         URL dependencyJarDirUrl = classLoader.getResource(dependencyJarDir);
         if (dependencyJarDirUrl != null) {
-            InputStream stream = classLoader.getResourceAsStream(dependencyJarDir);
             if (workspace == null) {
                 throw new RuntimeException("Please set workspace before source Jar");
             }
+            // In file
             File tmpDir = new File(workspace.getCanonicalFile() + File.separator + "jarTmp");
             checkDir(tmpDir);
             File sourceJarTmpFile = new File(tmpDir.getCanonicalFile() + File.separator + dependencyJarDir);
-            FileUtils.copyInputStreamToFile(stream, sourceJarTmpFile);
-            return dependencyJarDir(sourceJarTmpFile);
+            switch (dependencyJarDirUrl.getProtocol()) {
+                case "file":
+                    FileUtils.copyDirectory(new File(dependencyJarDirUrl.getFile()), sourceJarTmpFile);
+                    return dependencyJarDir(sourceJarTmpFile);
+                case "jar":
+                    InputStream stream = classLoader.getResourceAsStream(dependencyJarDir);
+                    FileUtils.copyInputStreamToFile(stream, sourceJarTmpFile);
+                    return dependencyJarDir(sourceJarTmpFile);
+            }
         }
         throw new RuntimeException("Invalid dependencies direction: " + dependencyJarDir);
     }
@@ -111,6 +118,7 @@ public class JarBuilder {
     public JarBuilder workspace(File workspace) throws IOException {
         this.workspace = workspace;
         checkDir(workspace);
+        cleanWorkspace();
         return this;
     }
 
@@ -219,7 +227,6 @@ public class JarBuilder {
         try {
             // 1. Check arguments
             checkArgs();
-            cleanWorkspace();
 
             // 2. Get classpath Jar(s)
             String[] classpathJars = getClasspathJars();

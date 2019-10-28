@@ -2,10 +2,9 @@ package com.hansight.dynamicjob.test;
 
 import com.alibaba.fastjson.JSONObject;
 import com.hansight.dynamicjob.generator.JarBuilder;
-import com.hansight.dynamicjob.tool.FileUtil;
 import com.hansight.dynamicjob.tool.FlinkRestApiUtil;
-import com.hansight.dynamicjob.tool.MD5Util;
 import com.hansight.dynamicjob.translator.JavaCodeTranslator;
+import com.hansight.dynamicjob.translator.SinkEntry;
 import com.hansight.dynamicjob.translator.SourceEntry;
 import com.hansight.dynamicjob.translator.TransformationEntry;
 
@@ -25,19 +24,26 @@ public class JarBuilderTest {
     public static void main(String[] args) {
         try {
             // 0. Translate rule to Java code
-            String kafkaSourceId = MD5Util.md5("KAFKA数据源");
-            String followedByTransId = MD5Util.md5("FollowedBy测试规则#1");
+            SourceEntry source;
+            SinkEntry sink;
             String javaCode = JavaCodeTranslator.builder()
-                    .addImport(FileUtil.read("template/HeaderImport.java"))
-                    .addSource(SourceEntry.kafka()
-                            .id(kafkaSourceId)
+                    .addSource((source = SourceEntry.kafka()
+                            .name("Kafka Source")
                             .prop("bootstrap.servers", "172.16.100.146:9092")
-                            .prop("group.id", "kafka-event-source-group")
-                            .prop("topic", "userActionsV3")
-                            .prop("watermark", 3000))
+                            .prop("group.id", "event-consumer-group")
+                            .prop("topic", "event")
+                            .prop("eventTime.field", "eventTime")
+                            .prop("eventTime.format", "yyyy-MM-dd'T'HH:mm:ss.SSSz")
+                            .prop("watermark", 3000)))
+                    .addSink((sink = SinkEntry.kafka()
+                            .name("Kafka Sink")
+                            .prop("bootstrap.servers", "172.16.100.146:9092")
+                            .prop("topic", "alarm")))
                     .addTransformation(TransformationEntry.followedBy()
-                            .id(followedByTransId)
-                            .source("kafka_source_test"))
+                            .name("FollowedBy测试规则#3")
+                            .source(source)
+                            .sink(sink)
+                            .prop("within", 3))
                     .build();
 
             System.out.println(javaCode);
@@ -53,7 +59,7 @@ public class JarBuilderTest {
 
             // 2. Request savepoint and cancel job
             String url = "http://172.16.100.146:8081";
-            String jobId = "78350269e2c62c139da38019d0d0a780";
+            String jobId = "3f33c4c836792944e4f2152f640b0f32";
             String savepointDir = "/opt/hansight/flink/flink-1.9.0/savepoint/";
             String requestId = FlinkRestApiUtil.savepointAsync(url, jobId, savepointDir, true);
             System.out.println("Cancel Job " + jobId + " success, savepoint request accepted: " + requestId);
@@ -84,84 +90,5 @@ public class JarBuilderTest {
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    private static String getJavaCode() {
-        return "package com.hansight;\n" +
-                "\n" +
-                "import org.apache.flink.streaming.api.TimeCharacteristic;\n" +
-                "import org.apache.flink.streaming.api.datastream.DataStream;\n" +
-                "import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;\n" +
-                "import org.apache.flink.table.api.EnvironmentSettings;\n" +
-                "import org.apache.flink.table.api.Table;\n" +
-                "import org.apache.flink.table.api.java.StreamTableEnvironment;\n" +
-                "import org.apache.flink.table.descriptors.Json;\n" +
-                "import org.apache.flink.table.descriptors.Kafka;\n" +
-                "import org.apache.flink.table.descriptors.Rowtime;\n" +
-                "import org.apache.flink.table.descriptors.Schema;\n" +
-                "import org.apache.flink.types.Row;\n" +
-                "\n" +
-                "public class TableJob  {\n" +
-                "\n" +
-                "    public static void main(String[] args) throws Exception {\n" +
-                "\n" +
-                "        StreamExecutionEnvironment bsEnv = StreamExecutionEnvironment.getExecutionEnvironment();\n" +
-                "        bsEnv.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);\n" +
-                "        EnvironmentSettings bsSettings = EnvironmentSettings.newInstance().useBlinkPlanner().inStreamingMode().build();\n" +
-                "        StreamTableEnvironment bsTableEnv = StreamTableEnvironment.create(bsEnv, bsSettings);\n" +
-                "\n" +
-                "        bsTableEnv\n" +
-                "                .connect(\n" +
-                "                        new Kafka()\n" +
-                "                                .version(\"0.10\")\n" +
-                "                                .topic(\"userActionsV3\")\n" +
-                "                                .startFromEarliest()\n" +
-                "                                .property(\"bootstrap.servers\", \"172.16.100.146:9092\")\n" +
-                "                                .property(\"group.id\", \"test-consumer-group\")\n" +
-                "                )\n" +
-                "                .withFormat(\n" +
-                "                        new Json()\n" +
-                "                                .deriveSchema()\n" +
-                "                )\n" +
-                "                .withSchema(\n" +
-                "                        new Schema()\n" +
-                "                                .field(\"username\", \"VARCHAR\")\n" +
-                "                                .field(\"region\", \"VARCHAR\")\n" +
-                "                                .field(\"eventId\", \"VARCHAR\")\n" +
-                "                                .field(\"action\", \"VARCHAR\")\n" +
-                "                                .field(\"rowTime\", \"TIMESTAMP\").rowtime(\n" +
-                "                                new Rowtime()\n" +
-                "                                        .timestampsFromField(\"eventTime\")\n" +
-                "                                        .watermarksPeriodicBounded(3000)\n" +
-                "                        )\n" +
-                "                                .field(\"procTime\", \"TIMESTAMP\").proctime()\n" +
-                "                )\n" +
-                "                .inAppendMode()\n" +
-                "                .registerTableSource(\"user_actions\");\n" +
-                "\n" +
-                "        Table sqlResult = bsTableEnv.sqlQuery(\"SELECT *\\n\" +\n" +
-                "                \"FROM user_actions\\n\" +\n" +
-                "                \"MATCH_RECOGNIZE(\\n\" +\n" +
-                "                \"    PARTITION BY username\\n\" +\n" +
-                "                \"    ORDER BY rowTime\\n\" +\n" +
-                "                \"    MEASURES\\n\" +\n" +
-                "                \"       A.rowTime     AS  start_time,\\n\" +\n" +
-                "                \"       A.region      AS  login_region,\\n\" +\n" +
-                "                \"       A.eventId     AS  start_event_id,\\n\" +\n" +
-                "                \"       B.eventId     AS  end_event_id,\\n\" +\n" +
-                "                \"       B.region      AS  logout_region\\n\" +\n" +
-                "                \"    ONE ROW PER MATCH\\n\" +\n" +
-                "                \"    AFTER MATCH SKIP PAST LAST ROW\\n\" +\n" +
-                "                \"    PATTERN (A B) WITHIN INTERVAL '3' HOUR\\n\" +\n" +
-                "                \"    DEFINE\\n\" +\n" +
-                "                \"        A AS A.action = 'Login',\\n\" +\n" +
-                "                \"        B AS B.action = 'Logout' AND B.region <> A.region\\n\" +\n" +
-                "                \")\\n\");\n" +
-                "        DataStream<Row> resultStream = bsTableEnv.toAppendStream(sqlResult, Row.class);\n" +
-                "        resultStream.print();\n" +
-                "\n" +
-                "        bsEnv.execute(\"Followed By Detection\");\n" +
-                "    }\n" +
-                "}\n";
     }
 }

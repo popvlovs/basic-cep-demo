@@ -1,7 +1,5 @@
 package com.hansight.dynamicjob.translator;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -11,10 +9,8 @@ import java.util.Objects;
  * @created 2019/10/18
  * @description .
  */
-public class SourceEntry {
+public class SourceEntry extends AbstractEntry {
     private SourceType type;
-    private String id;
-    private Map<String, Object> properties = new HashMap<>();
 
     private SourceEntry(SourceType type) {
         this.type = type;
@@ -33,6 +29,11 @@ public class SourceEntry {
         return this;
     }
 
+    public SourceEntry name(String name) {
+        this.name = name;
+        return this;
+    }
+
     public SourceEntry prop(String key, Object value) {
         properties.put(key, value);
         return this;
@@ -42,27 +43,20 @@ public class SourceEntry {
         return type;
     }
 
-    public String getId() {
-        return id;
-    }
-
-    public Map<String, Object> getProperties() {
-        return properties;
-    }
-
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof SourceEntry)) return false;
-
         SourceEntry that = (SourceEntry) o;
-
-        return Objects.equals(that.id, id);
+        return type == that.type &&
+                Objects.equals(id, that.id) &&
+                Objects.equals(name, that.name) &&
+                Objects.equals(properties, that.properties);
     }
 
     @Override
     public int hashCode() {
-        return id != null ? id.hashCode() : 0;
+        return Objects.hash(type, id, name, properties);
     }
 
     public enum SourceType {

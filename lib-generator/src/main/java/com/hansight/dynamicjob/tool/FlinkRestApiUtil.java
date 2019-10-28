@@ -113,6 +113,7 @@ public class FlinkRestApiUtil {
         body.put("entryClass", entryClass);
         body.put("parallelism", parallelism);
         body.put("savepointPath", savepoint);
+        body.put("allowNonRestoredState", true);
         String response = HttpUtil.doPost(url, path, Collections.emptyList(), body.toJSONString());
         JSONObject responseJo = JSONObject.parseObject(response);
         return responseJo.getString("jobid");

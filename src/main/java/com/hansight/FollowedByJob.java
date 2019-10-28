@@ -63,7 +63,7 @@ public class FollowedByJob {
                 "       B.region      AS  logout_region\n" +
                 "    ONE ROW PER MATCH\n" +
                 "    AFTER MATCH SKIP PAST LAST ROW\n" +
-                "    PATTERN (A -> B) WITHIN INTERVAL '3' HOUR\n" +
+                "    PATTERN (PERMUTE(A B)) WITHIN INTERVAL '3' HOUR\n" +
                 "    DEFINE\n" +
                 "        A AS A.action = 'Login',\n" +
                 "        B AS B.action = 'Logout' AND B.region <> A.region\n" +

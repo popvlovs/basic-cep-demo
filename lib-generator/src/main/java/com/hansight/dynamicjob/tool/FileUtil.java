@@ -4,9 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
-import java.net.JarURLConnection;
 import java.net.URL;
-import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
 /**

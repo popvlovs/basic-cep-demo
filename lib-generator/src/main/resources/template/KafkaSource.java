@@ -1,20 +1,22 @@
+// Kafka source (uid: {uid})
 Properties properties_{uid} = new Properties();
-{props}
-String topic_{uid} = "{topic}";
-int watermark_{uid} = {watermark};
-DataStream<ObjectNode> stream_{uid} = env.addSource(
-            new FlinkKafkaConsumer010<>(topic, new JSONKeyValueDeserializationSchema(false), properties)
-                .assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor<ObjectNode>(Time.milliseconds(watermark_{uid})) {
+properties_{uid}.setProperty("bootstrap.servers", "{bootstrap.servers}");
+properties_{uid}.setProperty("group.id", "{group.id}");
+DataStream<ObjectNode> source_{uid} = env.addSource(
+            new FlinkKafkaConsumer010<>("{topic}", new JSONKeyValueDeserializationSchema(false), properties_{uid})
+                .assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor<ObjectNode>(Time.milliseconds({watermark})) {
                     @Override
                     public long extractTimestamp(ObjectNode element) {
-                            JsonNode timestamp = element.findValue("eventTime");
+                            JsonNode timestamp = element.findValue("{eventTime.field}");
                             if (timestamp == null) {
                                 return System.currentTimeMillis();
                             } else {
-                                ZonedDateTime zdt = ZonedDateTime.parse(timestamp.asText(), DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSz"));
+                                ZonedDateTime zdt = ZonedDateTime.parse(timestamp.asText(), DateTimeFormatter.ofPattern("{eventTime.format}"));
                                 return zdt.toInstant().toEpochMilli();
                             }
                     }
                 })
                 .setStartFromEarliest()
-        ).uid("{uid}");
+        )
+        .name("{name}")
+        .uid("{uid}");

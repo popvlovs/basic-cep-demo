@@ -58,21 +58,21 @@ configurations {
     // always exclude these (also from transitive dependencies) since they are provided by Flink
     flinkShadowJar.exclude group: 'org.apache.flink', module: 'force-shading'
     flinkShadowJar.exclude group: 'com.google.code.findbugs', module: 'jsr305'
-    flinkShadowJar.exclude group: 'org.slf4j'
-    flinkShadowJar.exclude group: 'log4j'
+    // flinkShadowJar.exclude group: 'org.slf4j'
+    // flinkShadowJar.exclude group: 'log4j'
 
 }
 
 // declare the dependencies for your production and test code
 dependencies {
-    compile "org.apache.flink:flink-java:${flinkVersion}"
-    compile "org.apache.flink:flink-streaming-java_${scalaBinaryVersion}:${flinkVersion}"
-    compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.9'
-    compile group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.10'
-    compile group: 'org.apache.httpcomponents', name: 'httpmime', version: '4.5.10'
-    compile group: 'com.alibaba', name: 'fastjson', version: '1.2.59'
-    compile group: 'com.google.guava', name: 'guava', version: '28.1-jre'
-
+    flinkShadowJar group: 'org.apache.commons', name: 'commons-lang3', version: '3.9'
+    flinkShadowJar group: 'commons-io', name: 'commons-io', version: '2.4'
+    flinkShadowJar group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.10'
+    flinkShadowJar group: 'org.apache.httpcomponents', name: 'httpmime', version: '4.5.10'
+    flinkShadowJar group: 'com.alibaba', name: 'fastjson', version: '1.2.59'
+    flinkShadowJar group: 'com.google.guava', name: 'guava', version: '28.1-jre'
+    flinkShadowJar group: 'org.slf4j', name: 'slf4j-api', version: '1.7.25'
+    compile('com.hansight:panther:1.1')
 }
 
 // make compileOnly dependencies available for tests:

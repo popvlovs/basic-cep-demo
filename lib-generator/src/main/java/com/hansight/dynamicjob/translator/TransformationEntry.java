@@ -1,8 +1,9 @@
 package com.hansight.dynamicjob.translator;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import com.hansight.dynamicjob.sae.RuleRawEntity;
+import com.hansight.dynamicjob.translator.rule.FollowedBy;
+import org.apache.commons.lang3.builder.EqualsBuilder;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 /**
  * Copyright: 瀚思安信（北京）软件技术有限公司，保留所有权利。
@@ -11,18 +12,18 @@ import java.util.Objects;
  * @created 2019/10/21
  * @description .
  */
-public class TransformationEntry {
-    private TransformationType type;
-    private Map<String, Object> properties = new HashMap<>();
-    private String sourceId;
-    private String id;
+public class TransformationEntry extends AbstractEntry {
+    protected TransformationType type;
+    protected SourceEntry source;
+    protected SinkEntry sink;
+    protected RuleRawEntity rule;
 
     public TransformationEntry(TransformationType type) {
         this.type = type;
     }
 
     public static TransformationEntry followedBy() {
-        return new TransformationEntry(TransformationType.FOLLOWED_BY);
+        return new FollowedBy();
     }
 
     public TransformationEntry id(String id) {
@@ -30,13 +31,28 @@ public class TransformationEntry {
         return this;
     }
 
-    public TransformationEntry source(String id) {
-        this.sourceId = id;
+    public TransformationEntry name(String name) {
+        this.name = name;
         return this;
     }
 
     public TransformationEntry prop(String key, Object value) {
-        this.properties.put(key, value);
+        properties.put(key, value);
+        return this;
+    }
+
+    public TransformationEntry source(SourceEntry source) {
+        this.source = source;
+        return this;
+    }
+
+    public TransformationEntry sink(SinkEntry sink) {
+        this.sink = sink;
+        return this;
+    }
+
+    public TransformationEntry raw(RuleRawEntity rule) {
+        this.rule = rule;
         return this;
     }
 
@@ -44,32 +60,42 @@ public class TransformationEntry {
         return type;
     }
 
-    public Map<String, Object> getProperties() {
-        return properties;
-    }
-
     public String getSourceId() {
-        return sourceId;
+        return source.getId();
     }
 
-    public String getId() {
-        return id;
+    public String getSinkId() {
+        return sink.getId();
+    }
+
+    public String getSinkName() {
+        return sink.getName();
     }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
+
         if (!(o instanceof TransformationEntry)) return false;
+
         TransformationEntry that = (TransformationEntry) o;
-        return type == that.type &&
-                Objects.equals(properties, that.properties) &&
-                Objects.equals(sourceId, that.sourceId) &&
-                Objects.equals(id, that.id);
+
+        return new EqualsBuilder()
+                .appendSuper(super.equals(that))
+                .append(type, that.type)
+                .append(source, that.source)
+                .append(sink, that.sink)
+                .isEquals();
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(type, properties, sourceId, id);
+        return new HashCodeBuilder(17, 37)
+                .appendSuper(super.hashCode())
+                .append(type)
+                .append(source)
+                .append(sink)
+                .toHashCode();
     }
 
     public enum TransformationType {
