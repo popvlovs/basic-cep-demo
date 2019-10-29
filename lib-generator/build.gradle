@@ -72,7 +72,7 @@ dependencies {
     flinkShadowJar group: 'com.alibaba', name: 'fastjson', version: '1.2.59'
     flinkShadowJar group: 'com.google.guava', name: 'guava', version: '28.1-jre'
     flinkShadowJar group: 'org.slf4j', name: 'slf4j-api', version: '1.7.25'
-    compile('com.hansight:panther:1.1')
+    //compile('com.hansight:panther:1.1')
 }
 
 // make compileOnly dependencies available for tests:

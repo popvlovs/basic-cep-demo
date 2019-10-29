@@ -22,11 +22,15 @@ public class ExpressionUtil {
 
     public static boolean equal(ObjectNode data, String field, Object value) {
         validate(data, field, value);
-        switch (data.getNodeType()) {
+        JsonNode node = data.findValue(field);
+        if (node == null) {
+            return false;
+        }
+        switch (node.getNodeType()) {
             case STRING:
             case BOOLEAN:
             case OBJECT:
-                return Objects.equals(data.findValue(field), value);
+                return Objects.equals(node.asText(), value);
             case POJO:
             case NULL:
             case MISSING:
@@ -140,12 +144,7 @@ public class ExpressionUtil {
     public static boolean belong(ObjectNode data, String field, String value) {
         validate(data, field, value);
         String nodeVal = getFieldAsText(data, field);
-        Set<String> intelligences = RedisUtil.getIntelligence(value);
-        if (intelligences != null) {
-            return intelligences.contains(nodeVal);
-        } else {
-            return false;
-        }
+        return IntelligenceGroupUtil.contains(value, nodeVal);
     }
 
     private static void validate(Object... inputs) {
