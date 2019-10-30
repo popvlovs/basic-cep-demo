@@ -1,5 +1,6 @@
-package com.hansight;
+package com.hansight.havingcount;
 
+import com.hansight.ExpressionUtil;
 import org.apache.flink.api.common.functions.AggregateFunction;
 import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
@@ -18,7 +19,7 @@ import org.apache.flink.util.Collector;
 
 import java.util.Properties;
 
-public class MainJob {
+public class HavingCountIB {
 
     public static void main(String[] args) throws Exception {
 
@@ -45,9 +46,9 @@ public class MainJob {
                 .uid("kafka-source");
 
         stream
-                .filter(MainJob::filterByCondition)
+                .filter(HavingCountIB::filterByCondition)
                 .keyBy(node -> getFieldAsText(node, "src_address"))
-                .window(SlidingProcessingTimeWindows.of(Time.minutes(10), Time.minutes(1)))
+                .window(SlidingProcessingTimeWindows.of(Time.seconds(10), Time.seconds(1)))
                 .aggregate(new HavingCountAggregate(), new HavingCountProcessWindowFunction())
                 .print();
 

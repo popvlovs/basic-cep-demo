@@ -39,7 +39,7 @@ public class IntelligenceGroupUtil {
     private static final String CONTENT_NUM = "num";
     private static final String CONTENT_STRING = "string";
     private static final String CONTENT_IP = "ip";
-
+    private static Thread subscribeThread;
 
     static {
         subscriber = new SecIntelSubscriber();
@@ -51,7 +51,13 @@ public class IntelligenceGroupUtil {
     }
 
     private static void runSubscribe() {
-        Thread subscribeThread = new Thread(() -> jedis.subscribe(subscriber, CHANNEL_INTELLIGENCE_CUD));
+        subscribeThread = new Thread(() -> {
+            try {
+                jedis.subscribe(subscriber, CHANNEL_INTELLIGENCE_CUD);
+            } finally {
+                jedis.close();
+            }
+        });
         subscribeThread.setName("Redis subscriber of intelligence group (flink)");
         subscribeThread.setDaemon(true);
         subscribeThread.start();
@@ -59,8 +65,8 @@ public class IntelligenceGroupUtil {
 
     private static void registerCloseConnection() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            if (jedis != null) {
-                jedis.disconnect();
+            if (subscriber != null) {
+                subscriber.unsubscribe(CHANNEL_INTELLIGENCE_CUD);
             }
         }));
     }
@@ -291,7 +297,7 @@ public class IntelligenceGroupUtil {
         @Override
         boolean match(String value) {
             // todo
-            return false;
+            return StringUtils.equals(content, value);
         }
     }
 
@@ -316,7 +322,7 @@ public class IntelligenceGroupUtil {
         @Override
         boolean match(String value) {
             // todo
-            return false;
+            return StringUtils.equals(content, value);
         }
     }
 
@@ -330,7 +336,7 @@ public class IntelligenceGroupUtil {
         @Override
         boolean match(String value) {
             // todo
-            return false;
+            return StringUtils.equals(content, value);
         }
     }
 
@@ -342,8 +348,58 @@ public class IntelligenceGroupUtil {
 
         @Override
         boolean match(String value) {
-            // todo
-            return false;
+            if (content.contains("-")) {
+                // 0.0.0.0-255.255.255.255
+                String[] bounds = content.split("-");
+                long ipAsNum = toNumber(value);
+                long upperBound = toNumber(bounds[0]);
+                long lowerBound = toNumber(bounds[1]);
+                return ipAsNum >= Long.min(upperBound, lowerBound) && ipAsNum <= Long.max(upperBound, lowerBound);
+            } else if (content.contains("/")) {
+                // CIDR 208.130.29.0/24
+                String[] ipAndMask = content.split("/");
+                long ipAsNum = toNumber(value);
+                long num = toNumber(ipAndMask[0]);
+                String mask = ipAndMask[1];
+                return ipAsNum >= getLowerBound(num, mask) && ipAsNum <= getUpperBound(num, mask);
+            } else {
+                return StringUtils.equals(content, value);
+            }
+        }
+
+        private static long toNumber(String ip) {
+            ip = ip.trim();
+            String[] ips = ip.split("\\.");
+            long num = 0L;
+            try {
+                for (String i : ips) {
+                    num = num << 8 | Integer.parseInt(i);
+                }
+            } catch (NumberFormatException e) {
+                logger.debug("Error on parse ip to number: {}", ip, e);
+                return 0L;
+            }
+            return num;
+        }
+
+        private static long getLowerBound(long ip, String mask) {
+            try {
+                int bits = Integer.parseInt(mask);
+                return ip & (0xFFFFFFFFL << (32-bits));
+            } catch (NumberFormatException e) {
+                logger.debug("Error on parse CIDR mask: {}", mask, e);
+                return 0L;
+            }
+        }
+
+        private static long getUpperBound(long ip, String mask) {
+            try {
+                int bits = Integer.parseInt(mask);
+                return ip | (0xFFFFFFFFL >> bits);
+            } catch (NumberFormatException e) {
+                logger.debug("Error on parse CIDR mask: {}", mask, e);
+                return 0L;
+            }
         }
     }
 }

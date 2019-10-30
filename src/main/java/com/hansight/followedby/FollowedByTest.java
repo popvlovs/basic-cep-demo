@@ -1,4 +1,4 @@
-package com.hansight;
+package com.hansight.followedby;
 
 import com.alibaba.fastjson.JSONObject;
 import org.apache.flink.cep.CEP;
@@ -9,7 +9,7 @@ import org.apache.flink.cep.pattern.conditions.IterativeCondition;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
-public class FollowedByJobCustomSource {
+public class FollowedByTest {
 
     public static void main(String[] args) throws Exception {
 

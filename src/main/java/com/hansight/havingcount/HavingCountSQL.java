@@ -1,5 +1,6 @@
-package com.hansight;
+package com.hansight.havingcount;
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -12,7 +13,7 @@ import org.apache.flink.table.descriptors.Rowtime;
 import org.apache.flink.table.descriptors.Schema;
 import org.apache.flink.types.Row;
 
-public class FollowedByJob {
+public class HavingCountSQL {
 
     public static void main(String[] args) throws Exception {
 
@@ -25,7 +26,7 @@ public class FollowedByJob {
                 .connect(
                         new Kafka()
                                 .version("0.10")
-                                .topic("userActionsV4")
+                                .topic("userActionsV3")
                                 .startFromEarliest()
                                 .property("bootstrap.servers", "172.16.100.146:9092")
                                 .property("group.id", "test-consumer-group")
@@ -50,27 +51,18 @@ public class FollowedByJob {
                 .inAppendMode()
                 .registerTableSource("user_actions");
 
-        Table sqlResult = bsTableEnv.sqlQuery("SELECT *\n" +
+        Table sqlResult = bsTableEnv.sqlQuery("SELECT\n" +
+                "    HOP_START(rowTime, INTERVAL '10' SECOND, INTERVAL '30' SECOND) AS start_time,\n" +
+                "    HOP_END(rowTime, INTERVAL '10' SECOND, INTERVAL '30' SECOND) AS end_time,\n" +
+                "    username AS username,\n" +
+                "    action   AS action,\n" +
+                "    COUNT(*) AS action_count\n" +
                 "FROM user_actions\n" +
-                "MATCH_RECOGNIZE(\n" +
-                "    PARTITION BY username\n" +
-                "    ORDER BY rowTime\n" +
-                "    MEASURES\n" +
-                "       A.rowTime     AS  start_time,\n" +
-                "       A.region      AS  login_region,\n" +
-                "       A.eventId     AS  start_event_id,\n" +
-                "       B.eventId     AS  end_event_id,\n" +
-                "       B.region      AS  logout_region\n" +
-                "    ONE ROW PER MATCH\n" +
-                "    AFTER MATCH SKIP PAST LAST ROW\n" +
-                "    PATTERN (PERMUTE(A B)) WITHIN INTERVAL '3' HOUR\n" +
-                "    DEFINE\n" +
-                "        A AS A.action = 'Login',\n" +
-                "        B AS B.action = 'Logout' AND B.region <> A.region\n" +
-                ")\n");
-        DataStream<Row> resultStream = bsTableEnv.toAppendStream(sqlResult, Row.class);
+                "GROUP BY HOP(rowTime, INTERVAL '10' SECOND, INTERVAL '30' SECOND), username, action\n" +
+                "HAVING COUNT(*) > 10\n");
+        DataStream<Tuple2<Boolean, Row>> resultStream = bsTableEnv.toRetractStream(sqlResult, Row.class);
         resultStream.print();
 
-        bsEnv.execute("Followed By Detection");
+        bsEnv.execute("Having Count Detection");
     }
 }
