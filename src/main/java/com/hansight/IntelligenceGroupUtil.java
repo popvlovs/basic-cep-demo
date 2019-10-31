@@ -72,6 +72,9 @@ public class IntelligenceGroupUtil {
     }
 
     static boolean contains(String groupName, String value) {
+        if (value == null) {
+            return false;
+        }
         return subscriber.contains(groupName, value);
     }
 
