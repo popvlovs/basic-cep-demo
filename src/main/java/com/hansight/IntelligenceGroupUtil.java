@@ -165,7 +165,7 @@ public class IntelligenceGroupUtil {
             if (params.length != 3 && !StringUtils.equals(message, RELOAD_MESSAGE)) {
                 throw new IllegalArgumentException("Unexpected message format: " + message);
             }
-            // Case 1: reload all
+            // Case 1: Reload all
             if (StringUtils.equals(message, RELOAD_MESSAGE)) {
                 reloadAll();
                 return;

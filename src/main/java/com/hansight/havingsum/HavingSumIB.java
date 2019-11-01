@@ -1,5 +1,6 @@
-package com.hansight;
+package com.hansight.havingsum;
 
+import com.hansight.ExpressionUtil;
 import org.apache.flink.api.common.functions.AggregateFunction;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple;
@@ -19,21 +20,19 @@ import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer010;
 import org.apache.flink.streaming.util.serialization.JSONKeyValueDeserializationSchema;
 import org.apache.flink.util.Collector;
 
-import java.util.HashSet;
 import java.util.Properties;
-import java.util.Set;
 
-public class MainJob {
+public class HavingSumIB {
 
     public static void main(String[] args) throws Exception {
 
-        // 内部事件-主机特定端口被大量扫描
+        // 内网机器短时间内向外发送大量数据
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
 
         Properties properties = new Properties();
         properties.setProperty("bootstrap.servers", "172.16.100.193:9092");
-        properties.setProperty("group.id", "flink-consumer-group-1");
+        properties.setProperty("group.id", "flink-consumer-group-2");
         DataStream<ObjectNode> stream = env.addSource(new FlinkKafkaConsumer010<>("hes-sae-group-0", new JSONKeyValueDeserializationSchema(false), properties)
                 .assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor<ObjectNode>(Time.milliseconds(3000)) {
                     @Override
@@ -51,21 +50,20 @@ public class MainJob {
                 .uid("kafka-source");
 
         stream
-                .filter(MainJob::filterByCondition)
-                .keyBy(new Tuple2KeySelector("dst_address", "dst_port"))
-                .window(SlidingEventTimeWindows.of(Time.seconds(10), Time.seconds(1)))
-                .aggregate(new MainJob.HavingCountDistinctAggregate(), new MainJob.HavingCountProcessWindowFunction())
+                .filter(HavingSumIB::filterByCondition)
+                .keyBy(new Tuple2KeySelector("src_address", "dst_address"))
+                .window(SlidingEventTimeWindows.of(Time.minutes(10), Time.minutes(1)))
+                .aggregate(new HavingSumIB.HavingSumDoubleAggregate("send_byte"), new HavingSumIB.HavingSumProcessWindowFunction())
                 .print();
 
-        env.execute("Followed By Streaming Job");
+        env.execute("Having Sum Streaming Job");
     }
 
     private static boolean filterByCondition(ObjectNode node) {
-        boolean b1 = ExpressionUtil.equal(node, "event_digest", "nta_alert");
-        boolean b2 = !ExpressionUtil.belong(node, "threat_rule_id", "流量检测规则组集合");
-        boolean b3 = ExpressionUtil.rlike(node, "threat_info", "EXPLOIT.*");
-        boolean b4 = ExpressionUtil.belong(node, "src_address", "内网IP");
-        return b1 && b2 && b3 && b4;
+        return ExpressionUtil.equal(node, "event_name", "网络连接")
+                && ExpressionUtil.belong(node, "src_address", "内网IP")
+                && !ExpressionUtil.belong(node, "src_address", "web服务器地址")
+                && !ExpressionUtil.belong(node, "dst_address", "内网IP");
     }
 
     private static class Tuple2KeySelector implements KeySelector<ObjectNode, Tuple2<String, String>> {
@@ -77,58 +75,47 @@ public class MainJob {
 
         @Override
         public Tuple2<String, String> getKey(ObjectNode value) throws Exception {
-            return (Tuple2<String, String>) getFieldsAsText(value, fields);
+            return (Tuple2<String, String>) ExpressionUtil.getFieldsAsText(value, fields);
         }
     }
 
-    private static class HavingCountDistinctAggregate implements AggregateFunction<ObjectNode, Set<String>, Long> {
-        @Override
-        public Set<String> createAccumulator() {
-            return new HashSet<>();
+    private static class HavingSumDoubleAggregate implements AggregateFunction<ObjectNode, Double, Double> {
+
+        private String sumField;
+
+        public HavingSumDoubleAggregate(String sumField) {
+            this.sumField = sumField;
         }
 
         @Override
-        public Set<String> add(ObjectNode value, Set<String> accumulator) {
-            accumulator.add(getFieldAsText(value, "src_address"));
+        public Double createAccumulator() {
+            return 0.0D;
+        }
+
+        @Override
+        public Double add(ObjectNode value, Double accumulator) {
+            return accumulator + ExpressionUtil.getFieldAsValue(value, sumField, 0.0D);
+        }
+
+        @Override
+        public Double getResult(Double accumulator) {
             return accumulator;
         }
 
         @Override
-        public Long getResult(Set<String> accumulator) {
-            return (long) accumulator.size();
+        public Double merge(Double a, Double b) {
+            return a + b;
         }
+    }
 
+    private static class HavingSumProcessWindowFunction extends ProcessWindowFunction<Double, Tuple4<String, Long, Long, Double>, Tuple2<String, String>, TimeWindow> {
         @Override
-        public Set<String> merge(Set<String> a, Set<String> b) {
-            a.addAll(b);
-            return a;
+        public void process(Tuple2<String, String> key, Context context, Iterable<Double> elements, Collector<Tuple4<String, Long, Long, Double>> out) throws Exception {
+            Double count = elements.iterator().next();
+            if (count > 0) {
+                out.collect(new Tuple4<>(getTupleKeyAsString(key), context.window().getStart(), context.window().getEnd(), count));
+            }
         }
-    }
-
-    private static class HavingCountProcessWindowFunction extends ProcessWindowFunction<Long, Tuple4<String, Long, Long, Long>, Tuple2<String, String>, TimeWindow> {
-
-        @Override
-        public void process(Tuple2<String, String> key, Context context, java.lang.Iterable<Long> elements, Collector<Tuple4<String, Long, Long, Long>> out) throws Exception {
-            Long count = elements.iterator().next();
-            out.collect(new Tuple4<>(getTupleKeyAsString(key), context.window().getStart(), context.window().getEnd(), count));
-        }
-    }
-
-    private static Tuple getFieldsAsText(ObjectNode val, String... fields) {
-        int fieldNum = fields.length;
-        Tuple tuple = Tuple.newInstance(fieldNum);
-        for (int i = 0; i < fields.length; i++) {
-            tuple.setField(getFieldAsText(val, fields[i]), i);
-        }
-        return tuple;
-    }
-
-    private static String getFieldAsText(ObjectNode val, String field) {
-        JsonNode nodeVal = val.findValue(field);
-        if (nodeVal == null) {
-            return "None";
-        }
-        return nodeVal.asText("None");
     }
 
     private static String getTupleKeyAsString(Tuple key) {

@@ -1,6 +1,7 @@
 package com.hansight;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.*;
 import org.slf4j.Logger;
@@ -157,7 +158,15 @@ public class ExpressionUtil {
         }
     }
 
-    private static String getFieldAsText(ObjectNode data, String field) {
+    public static String getFieldAsText(ObjectNode data, String field, String defaultVal) {
+        JsonNode node = data.findValue(field);
+        if (node == null) {
+            return defaultVal;
+        }
+        return node.asText(defaultVal);
+    }
+
+    public static String getFieldAsText(ObjectNode data, String field) {
         JsonNode node = data.findValue(field);
         if (node == null) {
             return null;
@@ -165,7 +174,24 @@ public class ExpressionUtil {
         return node.asText();
     }
 
-    private static Double getFieldAsValue(ObjectNode data, String field) {
+    public static Tuple getFieldsAsText(ObjectNode val, String... fields) {
+        int fieldNum = fields.length;
+        Tuple tuple = Tuple.newInstance(fieldNum);
+        for (int i = 0; i < fields.length; i++) {
+            tuple.setField(getFieldAsText(val, fields[i], "None"), i);
+        }
+        return tuple;
+    }
+
+    public static Double getFieldAsValue(ObjectNode data, String field, Double defaultVal) {
+        JsonNode node = data.findValue(field);
+        if (node == null) {
+            return defaultVal;
+        }
+        return node.asDouble(defaultVal);
+    }
+
+    public static Double getFieldAsValue(ObjectNode data, String field) {
         JsonNode node = data.findValue(field);
         if (node == null) {
             return null;

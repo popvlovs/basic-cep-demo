@@ -2,6 +2,7 @@ package com.hansight.havingcountdistinct;
 
 import com.hansight.ExpressionUtil;
 import org.apache.flink.api.common.functions.AggregateFunction;
+import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple4;
@@ -12,14 +13,16 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.timestamps.BoundedOutOfOrdernessTimestampExtractor;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
-import org.apache.flink.streaming.api.windowing.assigners.SlidingProcessingTimeWindows;
+import org.apache.flink.streaming.api.windowing.assigners.SlidingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer010;
 import org.apache.flink.streaming.util.serialization.JSONKeyValueDeserializationSchema;
 import org.apache.flink.util.Collector;
 
+import java.util.HashSet;
 import java.util.Properties;
+import java.util.Set;
 
 public class HavingCountDistinctIB {
 
@@ -50,12 +53,12 @@ public class HavingCountDistinctIB {
 
         stream
                 .filter(HavingCountDistinctIB::filterByCondition)
-                .keyBy(node -> (Tuple2<String, String>) getFieldsAsText(node, "dst_address", "dst_port"))
-                .window(SlidingProcessingTimeWindows.of(Time.seconds(10), Time.seconds(1)))
-                .aggregate(new HavingCountDistinctIB.HavingCountAggregate(), new HavingCountDistinctIB.HavingCountProcessWindowFunction())
+                .keyBy(new Tuple2KeySelector("dst_address", "dst_port"))
+                .window(SlidingEventTimeWindows.of(Time.seconds(10), Time.seconds(1)))
+                .aggregate(new HavingCountDistinctIB.HavingCountDistinctAggregate(), new HavingCountDistinctIB.HavingCountProcessWindowFunction())
                 .print();
 
-        env.execute("Followed By Streaming Job");
+        env.execute("Having Count Distinct Streaming Job");
     }
 
     private static boolean filterByCondition(ObjectNode node) {
@@ -66,25 +69,40 @@ public class HavingCountDistinctIB {
         return b1 && b2 && b3 && b4;
     }
 
-    private static class HavingCountAggregate implements AggregateFunction<ObjectNode, Long, Long> {
-        @Override
-        public Long createAccumulator() {
-            return 0L;
+    private static class Tuple2KeySelector implements KeySelector<ObjectNode, Tuple2<String, String>> {
+        private String[] fields;
+
+        public Tuple2KeySelector(String... fields) {
+            this.fields = fields;
         }
 
         @Override
-        public Long add(ObjectNode value, Long accumulator) {
-            return accumulator + 1;
+        public Tuple2<String, String> getKey(ObjectNode value) throws Exception {
+            return (Tuple2<String, String>) getFieldsAsText(value, fields);
+        }
+    }
+
+    private static class HavingCountDistinctAggregate implements AggregateFunction<ObjectNode, Set<String>, Long> {
+        @Override
+        public Set<String> createAccumulator() {
+            return new HashSet<>();
         }
 
         @Override
-        public Long getResult(Long accumulator) {
+        public Set<String> add(ObjectNode value, Set<String> accumulator) {
+            accumulator.add(getFieldAsText(value, "src_address"));
             return accumulator;
         }
 
         @Override
-        public Long merge(Long a, Long b) {
-            return a + b;
+        public Long getResult(Set<String> accumulator) {
+            return (long) accumulator.size();
+        }
+
+        @Override
+        public Set<String> merge(Set<String> a, Set<String> b) {
+            a.addAll(b);
+            return a;
         }
     }
 
