@@ -1,4 +1,4 @@
-package com.hansight;
+package com.hansight.util;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.java.tuple.Tuple;
@@ -21,6 +21,19 @@ public class ExpressionUtil {
 
     private static final Logger logger = LoggerFactory.getLogger(ExpressionUtil.class);
 
+    public static boolean equal(ObjectNode objA, String fieldA, ObjectNode objB, String fieldB) {
+        validate(objA, fieldA, objB, fieldB);
+        JsonNode nodeA = objA.findValue(fieldA);
+        if (nodeA == null) {
+            return false;
+        }
+        JsonNode nodeB = objB.findValue(fieldB);
+        if (nodeB == null) {
+            return false;
+        }
+        return StringUtils.equalsIgnoreCase(nodeA.asText(), nodeB.asText());
+    }
+
     public static boolean equal(ObjectNode data, String field, Object value) {
         validate(data, field, value);
         JsonNode node = data.findValue(field);
@@ -31,14 +44,14 @@ public class ExpressionUtil {
             case STRING:
             case BOOLEAN:
             case OBJECT:
-                return Objects.equals(node.asText(), value);
+                return Objects.equals(node.asText(), value.toString());
             case POJO:
             case NULL:
             case MISSING:
             case ARRAY:
                 return false;
             default:
-                return false;
+                return Objects.equals(node.asText(), value.toString());
         }
     }
 
@@ -111,7 +124,14 @@ public class ExpressionUtil {
         return pattern.matcher(fieldAsText).matches();
     }
 
-    public static boolean contains(ObjectNode data, String field, Object value) {
+    public static boolean in(ObjectNode data, String field, String value) {
+        validate(data, field, value);
+        String fieldAsText = getFieldAsText(data, field);
+        IntelligenceGroupUtil.IpRangeMatcher matcher = new IntelligenceGroupUtil.IpRangeMatcher(value);
+        return matcher.match(fieldAsText);
+    }
+
+    public static boolean contain(ObjectNode data, String field, Object value) {
         validate(data, field, value);
         Iterator<JsonNode> it = getFieldAsArray(data, field);
         while(it != null && it.hasNext()) {

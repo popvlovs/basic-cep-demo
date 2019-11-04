@@ -1,6 +1,6 @@
 package com.hansight.followedby;
 
-import com.hansight.ExpressionUtil;
+import com.hansight.util.ExpressionUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.cep.CEP;
 import org.apache.flink.cep.nfa.aftermatch.AfterMatchSkipStrategy;

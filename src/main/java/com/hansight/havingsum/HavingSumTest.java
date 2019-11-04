@@ -1,6 +1,6 @@
 package com.hansight.havingsum;
 
-import com.hansight.ExpressionUtil;
+import com.hansight.util.ExpressionUtil;
 import org.apache.flink.api.common.functions.AggregateFunction;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple;

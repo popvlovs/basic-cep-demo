@@ -1,4 +1,4 @@
-package com.hansight;
+package com.hansight.util;
 
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
@@ -151,6 +151,7 @@ public class IntelligenceGroupUtil {
                             .map(content -> ContentMatcher.of(info, content))
                             .collect(Collectors.toSet());
                     contentsOfGroupName.put(groupName, matchers);
+                    contentsOfGroupName.put(id, matchers);
                 } catch (Exception e) {
                     logger.error("Error on reload redis enrich set: {}", key, e);
                 }
@@ -343,7 +344,7 @@ public class IntelligenceGroupUtil {
         }
     }
 
-    private static class IpRangeMatcher extends ContentMatcher {
+    public static class IpRangeMatcher extends ContentMatcher {
 
         IpRangeMatcher(String content) {
             this.content = content;

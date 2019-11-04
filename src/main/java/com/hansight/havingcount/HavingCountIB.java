@@ -1,6 +1,6 @@
 package com.hansight.havingcount;
 
-import com.hansight.ExpressionUtil;
+import com.hansight.util.ExpressionUtil;
 import org.apache.flink.api.common.functions.AggregateFunction;
 import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
