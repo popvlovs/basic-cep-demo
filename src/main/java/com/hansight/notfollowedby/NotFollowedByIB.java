@@ -36,8 +36,8 @@ public class NotFollowedByIB {
 
         Properties properties = new Properties();
         properties.setProperty("bootstrap.servers", "172.16.100.193:9092");
-        properties.setProperty("group.id", "flink-consumer-group-0");
-        DataStream<ObjectNode> stream = env.addSource(new FlinkKafkaConsumer010<>("hes-sae-group-5", new JSONKeyValueDeserializationSchema(false), properties)
+        properties.setProperty("group.id", "flink-consumer-group-5");
+        DataStream<ObjectNode> stream = env.addSource(new FlinkKafkaConsumer010<>("hes-sae-group-0", new JSONKeyValueDeserializationSchema(false), properties)
                 .assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor<ObjectNode>(Time.milliseconds(3000)) {
                     @Override
                     public long extractTimestamp(ObjectNode element) {
@@ -59,10 +59,14 @@ public class NotFollowedByIB {
                 .where(new IterativeCondition<ObjectNode>() {
                     @Override
                     public boolean filter(ObjectNode node, Context<ObjectNode> context) throws Exception {
+                        if (context.getEventsForPattern("sub-pattern-A").iterator().hasNext()) {
+                            return false;
+                        }
                         // A, 网络连接, 源地址 belong 内网IP and 目的端口 = 53 and not 目的地址 belong 内网IP and 发送流量 > 1000000 and not 目的地址 belong 保留IP地址列表 and 事件摘要 = "nta_flow"
                         return ExpressionUtil.equal(node, "event_name", "网络连接") && ExpressionUtil.belong(node, "src_address", "CSWLHT4101a6") && ExpressionUtil.equal(node, "dst_port", "53") && !ExpressionUtil.belong(node, "dst_address", "CSWLHT4101a6") && !ExpressionUtil.gt(node, "send_byte", 1000000) && !ExpressionUtil.belong(node, "dst_address", "V3SD2MBU5b01") && !ExpressionUtil.equal(node, "event_digest", "nta_flow");
                     }
                 })
+                .oneOrMore()
                 .followedBy("sub-pattern-B")
                 .where(new IterativeCondition<ObjectNode>() {
                     @Override
@@ -78,9 +82,9 @@ public class NotFollowedByIB {
                         return expr && relationExpr;
                     }
                 })
-                .within(Time.seconds(10));
+                .within(Time.minutes(10));
 
-        final OutputTag<String> outputTag = new OutputTag<>("not-followed-by-side-output");
+        final OutputTag<String> outputTag = new OutputTag<String>("not-followed-by-side-output"){};
         SingleOutputStreamOperator output = CEP.pattern(stream, pattern)
                 .flatSelect(
                         outputTag,
