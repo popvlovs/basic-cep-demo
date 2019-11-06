@@ -73,7 +73,7 @@ public class HaliteTranslator {
     }
 
     public static void main(String[] args) {
-        String halite = "源地址 belong 内网IP and not 目的地址 belong 内网IP";
+        String halite = "源地址 belong 内网IP and 目的端口 = 53 and not 目的地址 belong 内网IP and 发送流量 > 1000000 and not 目的地址 belong 保留IP地址列表 and 事件摘要 = \"nta_flow\"";
         System.out.println(translateFilter(halite));
         String relHalite = "A.源地址 = B.源地址 and A.目的地址 = B.目的地址 and A.源端口 = B.源端口 and A.目的端口 = B.目的端口";
         System.out.println(translateWhereCnd(relHalite));
@@ -109,9 +109,10 @@ public class HaliteTranslator {
                 exps.add("&&");
             } else if (StringUtils.equalsIgnoreCase(item.toString(), "or")) {
                 exps.add("||");
-            } else {
+            } else if (!StringUtils.equalsIgnoreCase(item.toString(), "not")) {
                 exps.add(item.toString());
             }
+            notPrefix = StringUtils.equalsIgnoreCase(item.toString(), "not") ? "!" : "";
         }
         return String.format("// %s\n%s", expression, String.join(" ", exps));
     }
@@ -180,11 +181,10 @@ public class HaliteTranslator {
                 exps.add("&&");
             } else if (StringUtils.equalsIgnoreCase(item.toString(), "or")) {
                 exps.add("||");
-            } else if (StringUtils.equalsIgnoreCase(item.toString(), "not")) {
-                notPrefix = "!";
-            } else {
+            } else if (!StringUtils.equalsIgnoreCase(item.toString(), "not")) {
                 exps.add(item.toString());
             }
+            notPrefix = StringUtils.equalsIgnoreCase(item.toString(), "not") ? "!" : "";
         }
         return String.format("// %s\n%s", expression, String.join(" ", exps));
     }

@@ -62,7 +62,7 @@ public class MiscUtil {
     }
 
     public static void printRecordAndWatermark(DataStream stream) {
-        stream.transform("WatermarkObserver", TypeInformation.of(ObjectNode.class), new FollowedByKafkaMultiTopicTest.WatermarkObserver());
+        stream.transform("WatermarkObserver", TypeInformation.of(ObjectNode.class), new WatermarkObserver());
     }
 
     public static class WatermarkObserver
@@ -80,7 +80,7 @@ public class MiscUtil {
         }
     }
 
-    private static ObjectNode getObjectNodeFromJson(String json, String timeField) throws Exception {
+    public static ObjectNode getObjectNodeFromJson(String json, String timeField) throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         ObjectNode node = mapper.createObjectNode();
         JSONObject jsonObj = JSONObject.parseObject(json);

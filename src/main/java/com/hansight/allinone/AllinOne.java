@@ -1,7 +1,6 @@
-package com.hansight.followedby;
+package com.hansight.allinone;
 
 import com.hansight.util.ExpressionUtil;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.cep.CEP;
 import org.apache.flink.cep.nfa.aftermatch.AfterMatchSkipStrategy;
 import org.apache.flink.cep.pattern.Pattern;
@@ -10,7 +9,6 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.timestamps.BoundedOutOfOrdernessTimestampExtractor;
 import org.apache.flink.streaming.api.windowing.time.Time;
@@ -20,16 +18,24 @@ import org.apache.flink.streaming.util.serialization.JSONKeyValueDeserialization
 import java.util.List;
 import java.util.Properties;
 
-public class FollowedByIB {
+/**
+ * Copyright: 瀚思安信（北京）软件技术有限公司，保留所有权利。
+ *
+ * @author yitian_song
+ * @created 2019/11/6
+ * @description .
+ */
+public class AllinOne {
 
     public static void main(String[] args) throws Exception {
-
+        // 数据源
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
 
+        // Benchmark测试，parallelism = 3 eps ≈ 7w
         Properties properties = new Properties();
         properties.setProperty("bootstrap.servers", "172.16.100.193:9092");
-        properties.setProperty("group.id", "flink-consumer-group-0");
+        properties.setProperty("group.id", "flink-consumer-group-3");
         DataStream<ObjectNode> stream = env.addSource(new FlinkKafkaConsumer010<>("hes-sae-group-0", new JSONKeyValueDeserializationSchema(false), properties)
                 .assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor<ObjectNode>(Time.milliseconds(3000)) {
                     @Override
@@ -46,7 +52,20 @@ public class FollowedByIB {
                 .name("Kafka-source")
                 .uid("kafka-source");
 
-        // 内网主机遭受远程漏洞攻击后创建操作系统账号
+
+        // Having-Any：内部邮件服务器向黑名单IP发送邮件
+        // Benchmark测试，单Operator + Source，parallelism = 3，eps ≈ 6.5w
+        stream
+                .filter(node -> ExpressionUtil.equal(node, "event_name", "网络连接")
+                        && ExpressionUtil.belong(node, "src_address", "邮件服务器地址")
+                        && ExpressionUtil.belong(node, "dst_address", "黑名单IP")
+                        && (ExpressionUtil.equal(node, "app_protocol", "smtp") || ExpressionUtil.equal(node, "dst_port", "25"))
+                        && !ExpressionUtil.belong(node, "dst_address", "保留IP地址列表"))
+                .name("Having Any #1")
+                .print();
+
+        // Followed-By：内网主机遭受远程漏洞攻击后创建操作系统账号
+        // Benchmark测试，单Operator + Source，parallelism = 3，eps ≈ 1.5w (初期4.8k)，back-pressure ≈ 0.8
         AfterMatchSkipStrategy skipStrategy = AfterMatchSkipStrategy.skipToNext();
         Pattern<ObjectNode, ObjectNode> pattern = Pattern.<ObjectNode>
                 begin("sub-pattern-A", skipStrategy)
@@ -67,15 +86,14 @@ public class FollowedByIB {
                         Iterable<ObjectNode> prevEvents = ctx.getEventsForPattern("sub-pattern-A");
                         if (prevEvents != null && prevEvents.iterator().hasNext()) {
                             ObjectNode eventA = prevEvents.iterator().next();
-                            boolean relationExpr = StringUtils.equals(eventA.findValue("src_address").asText(), val.findValue("dst_address").asText());
+                            boolean relationExpr = ExpressionUtil.equal(val, "dst_address", eventA, "src_address");
                             return expr && relationExpr;
                         }
                         return false;
                     }
                 })
                 .within(Time.seconds(10));
-
-        SingleOutputStreamOperator output = CEP.pattern(stream, pattern)
+        CEP.pattern(stream, pattern)
                 .select(matchedEvents -> {
                     StringBuilder sb = new StringBuilder();
                     for (String patternName : matchedEvents.keySet()) {
@@ -86,11 +104,9 @@ public class FollowedByIB {
                     }
                     return sb.toString();
                 })
-                .name("Pattern-FollowedBy")
-                .uid("Pattern-FollowedBy");
+                .name("Followed-By #1")
+                .print();
 
-        output.print();
-
-        env.execute("Followed By Streaming Job");
+        env.execute("All in One Streaming Job");
     }
 }

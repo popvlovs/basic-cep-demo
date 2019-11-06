@@ -53,20 +53,17 @@ public class NotFollowedByIB {
                 .name("Kafka-source")
                 .uid("kafka-source");
 
-        AfterMatchSkipStrategy skipStrategy = AfterMatchSkipStrategy.skipToLast("sub-pattern-A");
+        AfterMatchSkipStrategy skipStrategy = AfterMatchSkipStrategy.skipToNext();
         Pattern<ObjectNode, ObjectNode> pattern = Pattern.<ObjectNode>
                 begin("sub-pattern-A", skipStrategy)
                 .where(new IterativeCondition<ObjectNode>() {
                     @Override
                     public boolean filter(ObjectNode node, Context<ObjectNode> context) throws Exception {
-                        if (context.getEventsForPattern("sub-pattern-A").iterator().hasNext()) {
-                            return false;
-                        }
+
                         // A, 网络连接, 源地址 belong 内网IP and 目的端口 = 53 and not 目的地址 belong 内网IP and 发送流量 > 1000000 and not 目的地址 belong 保留IP地址列表 and 事件摘要 = "nta_flow"
                         return ExpressionUtil.equal(node, "event_name", "网络连接") && ExpressionUtil.belong(node, "src_address", "CSWLHT4101a6") && ExpressionUtil.equal(node, "dst_port", "53") && !ExpressionUtil.belong(node, "dst_address", "CSWLHT4101a6") && !ExpressionUtil.gt(node, "send_byte", 1000000) && !ExpressionUtil.belong(node, "dst_address", "V3SD2MBU5b01") && !ExpressionUtil.equal(node, "event_digest", "nta_flow");
                     }
                 })
-                .oneOrMore()
                 .followedBy("sub-pattern-B")
                 .where(new IterativeCondition<ObjectNode>() {
                     @Override

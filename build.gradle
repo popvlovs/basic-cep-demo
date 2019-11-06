@@ -18,7 +18,7 @@ plugins {
 // artifact properties
 group = 'com.hansight'
 version = '0.1-SNAPSHOT'
-mainClassName = 'com.hansight.MainJob'
+mainClassName = 'com.hansight.allinone.AllinOne'
 description = """HES v5.5 CEP Job"""
 
 ext {

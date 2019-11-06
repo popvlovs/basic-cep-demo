@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * Copyright: 瀚思安信（北京）软件技术有限公司，保留所有权利。
@@ -240,5 +241,23 @@ public class ExpressionUtil {
             return node.elements();
         }
         return null;
+    }
+
+    public static Long getFieldAsTimestamp(ObjectNode data, String field) {
+        JsonNode node = data.findValue(field);
+        if (node == null) {
+            return 0L;
+        }
+        return node.asLong(0L);
+    }
+
+    public static String getGroupSignature(ObjectNode data, String... fields) {
+        if (fields.length == 0) {
+            return "All";
+        }
+        return Stream.of(fields)
+                .map(field -> getFieldAsText(data, field, "None"))
+                .reduce((a, b) -> a + "," + b)
+                .orElse("None");
     }
 }
