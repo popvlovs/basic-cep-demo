@@ -70,11 +70,30 @@ public class AllinOne {
 
         bsTableEnv.registerFunction("belong", new BelongFunction());
 
-        for (int i = 0; i < 100; ++i) {
-            addSqlQuery(bsTableEnv);
-        }
+        addCepSqlQuery(bsTableEnv);
 
         bsEnv.execute("All in One");
+    }
+
+    private static void addCepSqlQuery(StreamTableEnvironment bsTableEnv) {
+        Table sqlResult = bsTableEnv.sqlQuery("SELECT *\n" +
+                "FROM events\n" +
+                "MATCH_RECOGNIZE(\n" +
+                //"    PARTITION BY src_address\n" +
+                "    ORDER BY row_time\n" +
+                "    MEASURES\n" +
+                "       A.row_time    AS  start_time,\n" +
+                "       A.event_name  AS  event_name_A,\n" +
+                "       B.row_time    AS  end_time,\n" +
+                "       B.event_name  AS  event_name_B\n" +
+                "    ONE ROW PER MATCH\n" +
+                "    AFTER MATCH SKIP PAST LAST ROW\n" +
+                "    PATTERN (A B) WITHIN INTERVAL '3' HOUR\n" +
+                "    DEFINE\n" +
+                "        A AS belong(A.src_address, '内网IP') AND A.event_name = '远程漏洞攻击',\n" +
+                "        B AS B.event_name = '账号创建'\n" +
+                ")\n");
+        bsTableEnv.toAppendStream(sqlResult, Row.class).print();
     }
 
     private static void addSqlQuery(StreamTableEnvironment bsTableEnv) {
@@ -84,7 +103,6 @@ public class AllinOne {
                 "    COUNT(*) AS action_count\n" +
                 "FROM events\n" +
                 "WHERE \n" +
-                "    event_digest = 'nta_alert' AND \n" +
                 "    belong(events.src_address, '内网IP') \n" +
                 "GROUP BY HOP(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND)\n" +
                 "HAVING COUNT(*) > 1000\n");
