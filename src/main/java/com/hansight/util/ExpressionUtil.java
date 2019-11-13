@@ -163,10 +163,14 @@ public class ExpressionUtil {
         return StringUtils.equals(iocMatcher, field);
     }
 
+    public static boolean belong(String nodeVal, String value) {
+        return IntelligenceGroupUtil.contains(value, nodeVal);
+    }
+
     public static boolean belong(ObjectNode data, String field, String value) {
         validate(data, field, value);
         String nodeVal = getFieldAsText(data, field);
-        return IntelligenceGroupUtil.contains(value, nodeVal);
+        return belong(nodeVal, value);
     }
 
     private static void validate(Object... inputs) {

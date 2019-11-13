@@ -1,8 +1,10 @@
-package com.hansight.allinone;
+package com.hansight.havingcount;
 
 import com.hansight.udfs.BelongFunction;
 import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.streaming.api.TimeCharacteristic;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.Table;
@@ -13,14 +15,7 @@ import org.apache.flink.table.descriptors.Rowtime;
 import org.apache.flink.table.descriptors.Schema;
 import org.apache.flink.types.Row;
 
-/**
- * Copyright: 瀚思安信（北京）软件技术有限公司，保留所有权利。
- *
- * @author yitian_song
- * @created 2019/11/6
- * @description .
- */
-public class AllinOne {
+public class HavingCountIBSQL {
 
     public static void main(String[] args) throws Exception {
 
@@ -70,14 +65,6 @@ public class AllinOne {
 
         bsTableEnv.registerFunction("belong", new BelongFunction());
 
-        for (int i = 0; i < 100; ++i) {
-            addSqlQuery(bsTableEnv);
-        }
-
-        bsEnv.execute("All in One");
-    }
-
-    private static void addSqlQuery(StreamTableEnvironment bsTableEnv) {
         Table sqlResult = bsTableEnv.sqlQuery("SELECT\n" +
                 "    HOP_START(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND) AS start_time,\n" +
                 "    HOP_END(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND) AS end_time,\n" +
@@ -89,5 +76,20 @@ public class AllinOne {
                 "GROUP BY HOP(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND)\n" +
                 "HAVING COUNT(*) > 1000\n");
         bsTableEnv.toRetractStream(sqlResult, Row.class).print();
+
+        Table sqlResult2 = bsTableEnv.sqlQuery("SELECT\n" +
+                "    HOP_START(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND) AS start_time,\n" +
+                "    HOP_END(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND) AS end_time,\n" +
+                "    COUNT(*) AS action_count\n" +
+                "FROM events\n" +
+                "WHERE \n" +
+                "    event_digest = 'nta_alert' AND \n" +
+                "    belong(events.src_address, '内网IP') \n" +
+                "GROUP BY HOP(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND)\n" +
+                "HAVING COUNT(*) > 1000\n");
+        bsTableEnv.toRetractStream(sqlResult2, Row.class).print();
+
+
+        bsEnv.execute("Having Count Detection");
     }
 }
