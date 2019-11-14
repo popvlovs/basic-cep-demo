@@ -13,13 +13,6 @@ import org.apache.flink.table.descriptors.Rowtime;
 import org.apache.flink.table.descriptors.Schema;
 import org.apache.flink.types.Row;
 
-/**
- * Copyright: 瀚思安信（北京）软件技术有限公司，保留所有权利。
- *
- * @author yitian_song
- * @created 2019/11/6
- * @description .
- */
 public class AllinOne {
 
     public static void main(String[] args) throws Exception {
@@ -41,13 +34,15 @@ public class AllinOne {
                 .withFormat(
                         new Json()
                                 .schema(Types.ROW_NAMED(
-                                        new String[]{"event_name", "src_address", "event_digest", "threat_info", "occur_time"},
+                                        new String[]{"event_name", "src_address", "dst_address", "event_digest", "threat_info", "occur_time"},
+                                        Types.STRING,
                                         Types.STRING,
                                         Types.STRING,
                                         Types.STRING,
                                         Types.STRING,
                                         Types.LONG
                                 ))
+                                .failOnMissingField(false)
                         // 不要使用deriveSchema，否则不兼容Long型的时间输入
                         /* new Json()
                                 .deriveSchema()*/
@@ -56,6 +51,7 @@ public class AllinOne {
                         new Schema()
                                 .field("event_name", Types.STRING)
                                 .field("src_address", Types.STRING)
+                                .field("dst_address", Types.STRING)
                                 .field("event_digest", Types.STRING)
                                 .field("threat_info", Types.STRING)
                                 .field("row_time", Types.SQL_TIMESTAMP).rowtime(
@@ -76,7 +72,7 @@ public class AllinOne {
     }
 
     private static void addCepSqlQuery(StreamTableEnvironment bsTableEnv) {
-        Table sqlResult = bsTableEnv.sqlQuery("SELECT *\n" +
+        /*Table sqlResult = bsTableEnv.sqlQuery("SELECT *\n" +
                 "FROM events\n" +
                 "MATCH_RECOGNIZE(\n" +
                 //"    PARTITION BY src_address\n" +
@@ -92,7 +88,25 @@ public class AllinOne {
                 "    DEFINE\n" +
                 "        A AS belong(A.src_address, '内网IP') AND A.event_name = '远程漏洞攻击',\n" +
                 "        B AS B.event_name = '账号创建'\n" +
-                ")\n");
+                ")\n");*/
+        Table sqlResult = bsTableEnv.sqlQuery("SELECT *\n" +
+                "FROM events\n" +
+                "  MATCH_RECOGNIZE (\n" +
+                "  PARTITION BY event_name\n" +
+                "  ORDER BY row_time\n" +
+                "  MEASURES \n" +
+                "    FIRST(A.src_address) as a_src,\n" +
+                "    FIRST(B.src_address) as b_src,\n" +
+                "    FIRST(A.dst_address) as a_dst,\n" +
+                "    FIRST(B.dst_address) as b_dst\n" +
+                "  ONE ROW PER MATCH\n" +
+                "  AFTER MATCH SKIP PAST LAST ROW\n" +
+                "  PATTERN (A{3,} B) WITHIN INTERVAL '1' MINUTE\n" +
+                "  DEFINE\n" +
+                "    A as A.src_address = '127.0.0.1',\n" +
+                "    B as B.src_address <> '127.0.0.1'\n" +
+                "  ) AS T");
+
         bsTableEnv.toAppendStream(sqlResult, Row.class).print();
     }
 
