@@ -208,6 +208,14 @@ public class ExpressionUtil {
         return tuple;
     }
 
+    public static Long getFieldAsLong(ObjectNode data, String field, Long defaultVal) {
+        JsonNode node = data.findValue(field);
+        if (node == null) {
+            return defaultVal;
+        }
+        return node.asLong(defaultVal);
+    }
+
     public static Double getFieldAsValue(ObjectNode data, String field, Double defaultVal) {
         JsonNode node = data.findValue(field);
         if (node == null) {

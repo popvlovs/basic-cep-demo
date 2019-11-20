@@ -22,6 +22,16 @@ public class AllinOne {
         EnvironmentSettings bsSettings = EnvironmentSettings.newInstance().useBlinkPlanner().inStreamingMode().build();
         StreamTableEnvironment bsTableEnv = StreamTableEnvironment.create(bsEnv, bsSettings);
 
+        bsTableEnv.sqlUpdate(
+                "CREATE TABLE events (" +
+                        "`event_name` VARCHAR, " +
+                        "`src_address` VARCHAR, " +
+                        "`dst_address` VARCHAR, " +
+                        "`event_digest` VARCHAR, " +
+                        "`threat_info` VARCHAR) WITH (" +
+                        "type = 'kafka'," +
+                        "topic = 'hes-sae-group-0',)");
+
         bsTableEnv
                 .connect(
                         new Kafka()
@@ -66,7 +76,9 @@ public class AllinOne {
 
         bsTableEnv.registerFunction("belong", new BelongFunction());
 
-        addCepSqlQuery(bsTableEnv);
+        for (int i = 0; i < 100; ++i) {
+            addSqlQuery(bsTableEnv);
+        }
 
         bsEnv.execute("All in One");
     }
@@ -116,8 +128,6 @@ public class AllinOne {
                 "    HOP_END(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND) AS end_time,\n" +
                 "    COUNT(*) AS action_count\n" +
                 "FROM events\n" +
-                "WHERE \n" +
-                "    belong(events.src_address, '内网IP') \n" +
                 "GROUP BY HOP(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND)\n" +
                 "HAVING COUNT(*) > 1000\n");
         bsTableEnv.toRetractStream(sqlResult, Row.class).print();

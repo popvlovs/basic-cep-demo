@@ -66,28 +66,13 @@ public class HavingCountIBSQL {
         bsTableEnv.registerFunction("belong", new BelongFunction());
 
         Table sqlResult = bsTableEnv.sqlQuery("SELECT\n" +
-                "    HOP_START(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND) AS start_time,\n" +
-                "    HOP_END(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND) AS end_time,\n" +
-                "    COUNT(*) AS action_count\n" +
+                "    TUMBLE(row_time, INTERVAL '30' MINUTE) AS start_time,\n" +
+                "    TUMBLE(row_time, INTERVAL '30' MINUTE) AS end_time,\n" +
+                "    COUNT(*) AS event_count," +
+                "    event_name\n" +
                 "FROM events\n" +
-                "WHERE \n" +
-                "    event_digest = 'nta_alert' AND \n" +
-                "    belong(events.src_address, '内网IP') \n" +
-                "GROUP BY HOP(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND)\n" +
-                "HAVING COUNT(*) > 1000\n");
+                "GROUP BY TUMBLE(row_time, INTERVAL '30' MINUTE), event_name");
         bsTableEnv.toRetractStream(sqlResult, Row.class).print();
-
-        Table sqlResult2 = bsTableEnv.sqlQuery("SELECT\n" +
-                "    HOP_START(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND) AS start_time,\n" +
-                "    HOP_END(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND) AS end_time,\n" +
-                "    COUNT(*) AS action_count\n" +
-                "FROM events\n" +
-                "WHERE \n" +
-                "    event_digest = 'nta_alert' AND \n" +
-                "    belong(events.src_address, '内网IP') \n" +
-                "GROUP BY HOP(row_time, INTERVAL '10' SECOND, INTERVAL '30' SECOND)\n" +
-                "HAVING COUNT(*) > 1000\n");
-        bsTableEnv.toRetractStream(sqlResult2, Row.class).print();
 
 
         bsEnv.execute("Having Count Detection");

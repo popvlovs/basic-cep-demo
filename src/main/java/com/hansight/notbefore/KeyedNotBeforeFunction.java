@@ -1,18 +1,15 @@
 package com.hansight.notbefore;
 
 import com.hansight.util.ExpressionUtil;
-import org.apache.flink.api.common.state.ListState;
-import org.apache.flink.api.common.state.ListStateDescriptor;
-import org.apache.flink.runtime.state.FunctionInitializationContext;
-import org.apache.flink.runtime.state.FunctionSnapshotContext;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.ObjectNode;
-import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
-import org.apache.flink.streaming.api.functions.ProcessFunction;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.util.Collector;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,38 +22,30 @@ import java.util.concurrent.ConcurrentHashMap;
  * @description .
  */
 
-public class NotBeforeFunction extends ProcessFunction<ObjectNode, List<ObjectNode>> implements CheckpointedFunction {
+public class KeyedNotBeforeFunction extends KeyedProcessFunction<String, ObjectNode, List<ObjectNode>> {
 
-    private transient ListState<Map> lastAState;
-    private transient ListState<Map> silencePeriod;
+    private transient ValueState<Map> lastAState;
+    private transient ValueState<Map> silencePeriod;
     private String[] groupFieldsA;
     private String[] groupFieldsB;
 
-    public NotBeforeFunction(String[] groupFieldsA, String[] groupFieldsB) {
+    public KeyedNotBeforeFunction(String[] groupFieldsA, String[] groupFieldsB) {
         this.groupFieldsA = groupFieldsA;
         this.groupFieldsB = groupFieldsB;
     }
 
     @Override
-    public void snapshotState(FunctionSnapshotContext context) throws Exception {
-
+    public void open(Configuration parameters) throws Exception {
+        lastAState = getRuntimeContext().getState(new ValueStateDescriptor<>("OperatorState-not-before-last-A", Map.class));
+        silencePeriod = getRuntimeContext().getState(new ValueStateDescriptor<>("OperatorState-not-before-silence-period", Map.class));
     }
 
     @Override
-    public void initializeState(FunctionInitializationContext context) throws Exception {
-        ListStateDescriptor<Map> stateDescriptor = new ListStateDescriptor<>("OperatorState-not-before-last-A", Map.class);
-        lastAState = context.getOperatorStateStore().getUnionListState(stateDescriptor);
-        ListStateDescriptor<Map> silenceStateDescriptor = new ListStateDescriptor<>("OperatorState-not-before-silence-period", Map.class);
-        silencePeriod = context.getOperatorStateStore().getUnionListState(silenceStateDescriptor);
-    }
-
-    @Override
-    public void processElement(ObjectNode node, Context ctx, Collector<List<ObjectNode>> out) throws Exception {
-        process(node, ctx, out);
+    public void processElement(ObjectNode value, Context ctx, Collector<List<ObjectNode>> out) throws Exception {
+        //process(value, ctx, out);
     }
 
     private void process(ObjectNode node, Context ctx, Collector<List<ObjectNode>> out) throws Exception {
-        // todo 加入watermark机制
         if (ExpressionUtil.equal(node, "event_name", "邮件登陆")) {
             // On event A
             String group = ExpressionUtil.getGroupSignature(node, groupFieldsA);
@@ -97,10 +86,7 @@ public class NotBeforeFunction extends ProcessFunction<ObjectNode, List<ObjectNo
     }
 
     private long getPrevOutputTimestamp(String groupSignature) throws Exception {
-        if (!silencePeriod.get().iterator().hasNext()) {
-            return 0L;
-        }
-        Map<String, Long> prevOutputTime = (Map<String, Long>) silencePeriod.get().iterator().next();
+        Map<String, Long> prevOutputTime = (Map<String, Long>) silencePeriod.value();
         if (prevOutputTime == null) {
             return 0L;
         }
@@ -108,18 +94,18 @@ public class NotBeforeFunction extends ProcessFunction<ObjectNode, List<ObjectNo
     }
 
     synchronized private void setPrevOutputTimestamp(String groupSignature, Long time) throws Exception {
-        if (!silencePeriod.get().iterator().hasNext()) {
+        if (silencePeriod.value() != null) {
             Map<String, Long> outputTimestamp = new ConcurrentHashMap<>();
             outputTimestamp.put(groupSignature, time);
-            silencePeriod.update(Collections.singletonList(outputTimestamp));
+            silencePeriod.update(outputTimestamp);
         } else {
-            Map<String, Long> prevOutputTime = (Map<String, Long>) silencePeriod.get().iterator().next();
+            Map<String, Long> prevOutputTime = (Map<String, Long>) silencePeriod.value();
             if (prevOutputTime != null) {
                 prevOutputTime.put(groupSignature, time);
             } else {
                 Map<String, Long> outputTimestamp = new ConcurrentHashMap<>();
                 outputTimestamp.put(groupSignature, time);
-                silencePeriod.update(Collections.singletonList(outputTimestamp));
+                silencePeriod.update(outputTimestamp);
             }
         }
     }
@@ -129,10 +115,7 @@ public class NotBeforeFunction extends ProcessFunction<ObjectNode, List<ObjectNo
     }
 
     private ObjectNode getPrevA(String groupSignature) throws Exception {
-        if (!lastAState.get().iterator().hasNext()) {
-            return null;
-        }
-        Map<String, ObjectNode> state = (Map<String, ObjectNode>) lastAState.get().iterator().next();
+        Map<String, ObjectNode> state = (Map<String, ObjectNode>) lastAState.value();
         if (state == null) {
             return null;
         }
@@ -144,9 +127,9 @@ public class NotBeforeFunction extends ProcessFunction<ObjectNode, List<ObjectNo
         if (noPrevA(groupSignature)) {
             Map<String, ObjectNode> state = new ConcurrentHashMap<>();
             state.put(groupSignature, data);
-            lastAState.update(Collections.singletonList(state));
+            lastAState.update(state);
         } else {
-            Map<String, ObjectNode> state = lastAState.get().iterator().next();
+            Map<String, ObjectNode> state = (Map<String, ObjectNode>) lastAState.value();
             state.put(groupSignature, data);
         }
     }
