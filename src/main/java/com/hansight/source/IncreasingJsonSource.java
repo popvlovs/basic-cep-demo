@@ -1,7 +1,6 @@
 package com.hansight.source;
 
 import com.hansight.util.MiscUtil;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**

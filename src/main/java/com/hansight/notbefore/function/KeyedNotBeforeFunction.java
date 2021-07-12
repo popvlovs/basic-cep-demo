@@ -1,7 +1,7 @@
-package com.hansight.notbefore;
+package com.hansight.notbefore.function;
 
 import com.hansight.util.ExpressionUtil;
-import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.ObjectNode;
@@ -10,6 +10,7 @@ import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.util.Collector;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,8 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class KeyedNotBeforeFunction extends KeyedProcessFunction<String, ObjectNode, List<ObjectNode>> {
 
-    private transient ValueState<Map> lastAState;
-    private transient ValueState<Map> silencePeriod;
+    private transient ListState<Map> lastAState;
+    private transient ListState<Map> silencePeriod;
     private String[] groupFieldsA;
     private String[] groupFieldsB;
 
@@ -36,13 +37,12 @@ public class KeyedNotBeforeFunction extends KeyedProcessFunction<String, ObjectN
 
     @Override
     public void open(Configuration parameters) throws Exception {
-        lastAState = getRuntimeContext().getState(new ValueStateDescriptor<>("OperatorState-not-before-last-A", Map.class));
-        silencePeriod = getRuntimeContext().getState(new ValueStateDescriptor<>("OperatorState-not-before-silence-period", Map.class));
+        getRuntimeContext().getState(new ValueStateDescriptor<>("lastA", Map.class));
     }
 
     @Override
     public void processElement(ObjectNode value, Context ctx, Collector<List<ObjectNode>> out) throws Exception {
-        //process(value, ctx, out);
+        process(value, ctx, out);
     }
 
     private void process(ObjectNode node, Context ctx, Collector<List<ObjectNode>> out) throws Exception {
@@ -86,7 +86,10 @@ public class KeyedNotBeforeFunction extends KeyedProcessFunction<String, ObjectN
     }
 
     private long getPrevOutputTimestamp(String groupSignature) throws Exception {
-        Map<String, Long> prevOutputTime = (Map<String, Long>) silencePeriod.value();
+        if (!silencePeriod.get().iterator().hasNext()) {
+            return 0L;
+        }
+        Map<String, Long> prevOutputTime = (Map<String, Long>) silencePeriod.get().iterator().next();
         if (prevOutputTime == null) {
             return 0L;
         }
@@ -94,18 +97,18 @@ public class KeyedNotBeforeFunction extends KeyedProcessFunction<String, ObjectN
     }
 
     synchronized private void setPrevOutputTimestamp(String groupSignature, Long time) throws Exception {
-        if (silencePeriod.value() != null) {
+        if (!silencePeriod.get().iterator().hasNext()) {
             Map<String, Long> outputTimestamp = new ConcurrentHashMap<>();
             outputTimestamp.put(groupSignature, time);
-            silencePeriod.update(outputTimestamp);
+            silencePeriod.update(Collections.singletonList(outputTimestamp));
         } else {
-            Map<String, Long> prevOutputTime = (Map<String, Long>) silencePeriod.value();
+            Map<String, Long> prevOutputTime = (Map<String, Long>) silencePeriod.get().iterator().next();
             if (prevOutputTime != null) {
                 prevOutputTime.put(groupSignature, time);
             } else {
                 Map<String, Long> outputTimestamp = new ConcurrentHashMap<>();
                 outputTimestamp.put(groupSignature, time);
-                silencePeriod.update(outputTimestamp);
+                silencePeriod.update(Collections.singletonList(outputTimestamp));
             }
         }
     }
@@ -115,7 +118,10 @@ public class KeyedNotBeforeFunction extends KeyedProcessFunction<String, ObjectN
     }
 
     private ObjectNode getPrevA(String groupSignature) throws Exception {
-        Map<String, ObjectNode> state = (Map<String, ObjectNode>) lastAState.value();
+        if (!lastAState.get().iterator().hasNext()) {
+            return null;
+        }
+        Map<String, ObjectNode> state = (Map<String, ObjectNode>) lastAState.get().iterator().next();
         if (state == null) {
             return null;
         }
@@ -127,9 +133,9 @@ public class KeyedNotBeforeFunction extends KeyedProcessFunction<String, ObjectN
         if (noPrevA(groupSignature)) {
             Map<String, ObjectNode> state = new ConcurrentHashMap<>();
             state.put(groupSignature, data);
-            lastAState.update(state);
+            lastAState.update(Collections.singletonList(state));
         } else {
-            Map<String, ObjectNode> state = (Map<String, ObjectNode>) lastAState.value();
+            Map<String, ObjectNode> state = lastAState.get().iterator().next();
             state.put(groupSignature, data);
         }
     }

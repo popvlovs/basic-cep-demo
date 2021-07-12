@@ -1,11 +1,12 @@
-package com.hansight.notbefore;
+package com.hansight.notbefore.function;
 
+import com.alibaba.fastjson.JSONObject;
 import com.hansight.util.ExpressionUtil;
+import com.hansight.util.condition.Condition;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
-import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.streaming.api.windowing.time.Time;
@@ -25,16 +26,48 @@ import java.util.concurrent.ConcurrentHashMap;
  * @description .
  */
 
-public class NotBeforeFunction extends ProcessFunction<ObjectNode, List<ObjectNode>> implements CheckpointedFunction {
+public class NotBeforeJsonFunction extends ProcessFunction<JSONObject, List<JSONObject>> implements CheckpointedFunction {
 
-    private transient ListState<Map> lastAState;
+
+    /**
+     * Last seen A state
+     */
+    private transient ListState<Map> lastSeenA;
+
+    /**
+     * Silent period state
+     */
     private transient ListState<Map> silencePeriod;
-    private String[] groupFieldsA;
-    private String[] groupFieldsB;
 
-    public NotBeforeFunction(String[] groupFieldsA, String[] groupFieldsB) {
-        this.groupFieldsA = groupFieldsA;
-        this.groupFieldsB = groupFieldsB;
+    /**
+     * Silent period seconds
+     */
+    private long silentPeriodSecs;
+
+    /**
+     * Group by condition
+     */
+    private String[] groupByConditionA;
+    private String[] groupByConditionB;
+
+    /**
+     * Event time field, default as eventTimeField
+     */
+    private String eventTimeField;
+
+    /**
+     * Event filter condition
+     */
+    private Condition conditionA;
+    private Condition conditionB;
+
+    public NotBeforeJsonFunction(long silentPeriodSecs, String[] groupByConditionA, String[] groupByConditionB, String eventTimeField, Condition conditionA, Condition conditionB) {
+        this.silentPeriodSecs = silentPeriodSecs;
+        this.groupByConditionA = groupByConditionA;
+        this.groupByConditionB = groupByConditionB;
+        this.eventTimeField = eventTimeField;
+        this.conditionA = conditionA;
+        this.conditionB = conditionB;
     }
 
     @Override
@@ -45,52 +78,51 @@ public class NotBeforeFunction extends ProcessFunction<ObjectNode, List<ObjectNo
     @Override
     public void initializeState(FunctionInitializationContext context) throws Exception {
         ListStateDescriptor<Map> stateDescriptor = new ListStateDescriptor<>("OperatorState-not-before-last-A", Map.class);
-        lastAState = context.getOperatorStateStore().getUnionListState(stateDescriptor);
+        lastSeenA = context.getOperatorStateStore().getUnionListState(stateDescriptor);
         ListStateDescriptor<Map> silenceStateDescriptor = new ListStateDescriptor<>("OperatorState-not-before-silence-period", Map.class);
         silencePeriod = context.getOperatorStateStore().getUnionListState(silenceStateDescriptor);
     }
 
     @Override
-    public void processElement(ObjectNode node, Context ctx, Collector<List<ObjectNode>> out) throws Exception {
+    public void processElement(JSONObject node, Context ctx, Collector<List<JSONObject>> out) throws Exception {
         process(node, ctx, out);
     }
 
-    private void process(ObjectNode node, Context ctx, Collector<List<ObjectNode>> out) throws Exception {
-        // todo 加入watermark机制
-        if (ExpressionUtil.equal(node, "event_name", "邮件登陆")) {
+    private void process(JSONObject node, Context ctx, Collector<List<JSONObject>> out) throws Exception {
+        if (conditionA.eval(node)) {
             // On event A
-            String group = ExpressionUtil.getGroupSignature(node, groupFieldsA);
+            String group = ExpressionUtil.getGroupSignature(node, groupByConditionA);
             if (noPrevA(group)) {
                 updateLastEventState(node);
             } else {
-                ObjectNode lastA = getPrevA(group);
-                if (ExpressionUtil.getFieldAsTimestamp(node, "occur_time") > ExpressionUtil.getFieldAsTimestamp(lastA, "occur_time")) {
+                JSONObject lastSeenA = getPrevA(group);
+                if (ExpressionUtil.getFieldAsTimestamp(node, eventTimeField) > ExpressionUtil.getFieldAsTimestamp(lastSeenA, eventTimeField)) {
                     updateLastEventState(node);
                 }
             }
-        } else if (ExpressionUtil.equal(node, "event_name", "邮件发送")) {
+        } else if (conditionB.eval(node)) {
             // On event B
-            Long occurTimeB = ExpressionUtil.getFieldAsTimestamp(node, "occur_time");
-            String group = ExpressionUtil.getGroupSignature(node, groupFieldsB);
+            Long occurTimeB = ExpressionUtil.getFieldAsTimestamp(node, eventTimeField);
+            String group = ExpressionUtil.getGroupSignature(node, groupByConditionB);
             if (noPrevA(group)) {
                 output(out, group, occurTimeB, node);
             } else {
-                ObjectNode lastA = getPrevA(group);
-                if (lastA == null) {
+                JSONObject lastSeenA = getPrevA(group);
+                if (lastSeenA == null) {
                     output(out, group, occurTimeB, node);
                 } else {
-                    Long occurTimeA = ExpressionUtil.getFieldAsTimestamp(lastA, "occur_time");
+                    Long occurTimeA = ExpressionUtil.getFieldAsTimestamp(lastSeenA, eventTimeField);
                     if (occurTimeB - occurTimeA > Time.minutes(10).toMilliseconds()) {
-                        output(out, group, occurTimeB, node, lastA);
+                        output(out, group, occurTimeB, node, lastSeenA);
                     }
                 }
             }
         }
     }
 
-    private void output(Collector<List<ObjectNode>> out, String groupSignature, Long time, ObjectNode... data) throws Exception {
+    private void output(Collector<List<JSONObject>> out, String groupSignature, Long time, JSONObject... data) throws Exception {
         // 加入输出的静默周期，防止大量冗余输出
-        if (time - getPrevOutputTimestamp(groupSignature) > Time.seconds(5).toMilliseconds()) {
+        if (time - getPrevOutputTimestamp(groupSignature) > Time.seconds(silentPeriodSecs).toMilliseconds()) {
             setPrevOutputTimestamp(groupSignature, time);
             out.collect(Arrays.asList(data));
         }
@@ -128,25 +160,25 @@ public class NotBeforeFunction extends ProcessFunction<ObjectNode, List<ObjectNo
         return getPrevA(groupSignature) == null;
     }
 
-    private ObjectNode getPrevA(String groupSignature) throws Exception {
-        if (!lastAState.get().iterator().hasNext()) {
+    private JSONObject getPrevA(String groupSignature) throws Exception {
+        if (!lastSeenA.get().iterator().hasNext()) {
             return null;
         }
-        Map<String, ObjectNode> state = (Map<String, ObjectNode>) lastAState.get().iterator().next();
+        Map<String, JSONObject> state = (Map<String, JSONObject>) lastSeenA.get().iterator().next();
         if (state == null) {
             return null;
         }
         return state.get(groupSignature);
     }
 
-    synchronized private void updateLastEventState(ObjectNode data) throws Exception {
-        String groupSignature = ExpressionUtil.getGroupSignature(data, groupFieldsA);
+    synchronized private void updateLastEventState(JSONObject data) throws Exception {
+        String groupSignature = ExpressionUtil.getGroupSignature(data, groupByConditionA);
         if (noPrevA(groupSignature)) {
-            Map<String, ObjectNode> state = new ConcurrentHashMap<>();
+            Map<String, JSONObject> state = new ConcurrentHashMap<>();
             state.put(groupSignature, data);
-            lastAState.update(Collections.singletonList(state));
+            lastSeenA.update(Collections.singletonList(state));
         } else {
-            Map<String, ObjectNode> state = lastAState.get().iterator().next();
+            Map<String, JSONObject> state = lastSeenA.get().iterator().next();
             state.put(groupSignature, data);
         }
     }

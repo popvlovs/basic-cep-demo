@@ -9,10 +9,9 @@ import org.slf4j.LoggerFactory;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPubSub;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Queue;
+import java.util.*;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.stream.Stream;
 
 /**
  * Copyright: 瀚思安信（北京）软件技术有限公司，保留所有权利。
@@ -73,10 +72,12 @@ public class HaliteTranslator {
     }
 
     public static void main(String[] args) {
-        String halite = "源地址 belong 内网IP and 目的端口 = 53 and not 目的地址 belong 内网IP and 发送流量 > 1000000 and not 目的地址 belong 保留IP地址列表 and 事件摘要 = \"nta_flow\"";
+        /*String halite = "源地址 belong 内网IP and 目的端口 = 53 and not 目的地址 belong 内网IP and 发送流量 > 1000000 and not 目的地址 belong 保留IP地址列表 and 事件摘要 = \"nta_flow\"";
         System.out.println(translateFilter(halite));
         String relHalite = "A.源地址 = B.源地址 and A.目的地址 = B.目的地址 and A.源端口 = B.源端口 and A.目的端口 = B.目的端口";
-        System.out.println(translateWhereCnd(relHalite));
+        System.out.println(translateWhereCnd(relHalite));*/
+        String halite = "((源地址 belong 内网IP and 目的端口 = 53) and (not 目的地址 belong 内网IP and 发送流量 > 1000000)) and 发送流量 > 1000000";
+        System.out.println(getPostfixExpressions(halite));
     }
 
     public static String translateWhereCnd(String expression) {
@@ -115,6 +116,72 @@ public class HaliteTranslator {
             notPrefix = StringUtils.equalsIgnoreCase(item.toString(), "not") ? "!" : "";
         }
         return String.format("// %s\n%s", expression, String.join(" ", exps));
+    }
+
+    public static Queue<Object> getHaliteQueue(String filter) {
+        return haliteParser.convertHalite(filter, null);
+    }
+
+    public static Stack<Object> getPostfixExpressions(String filter) {
+        Queue<Object> queue = getHaliteQueue(filter);
+        Stack<Object> temporalStack = new Stack<>();
+        Stack<Object> postfixStack = new Stack<>();
+
+        for (Object item : queue) {
+            if (item == null) {
+                throw new IllegalArgumentException("Invalid halite filter: " + filter);
+            }
+            if (item instanceof String) {
+                switch (item.toString().toLowerCase()) {
+                    case "(":
+                        temporalStack.push(item);
+                        break;
+                    case ")":
+                        while (!isAnyMatch(temporalStack.peek().toString(), "(")) {
+                            postfixStack.push(temporalStack.pop());
+                        }
+                        temporalStack.pop();
+                        break;
+                    case "and":
+                        while (!temporalStack.empty() && !isAnyMatch(temporalStack.peek().toString(), "(", "or")) {
+                            postfixStack.push(temporalStack.pop());
+                        }
+                        temporalStack.push(item);
+                        break;
+                    case "or":
+                    case "not":
+                        while (!temporalStack.empty() && !isAnyMatch(temporalStack.peek().toString(), "(")) {
+                            postfixStack.push(temporalStack.pop());
+                        }
+                        temporalStack.push(item);
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Unsupported operator: " + item);
+                }
+            } else if (item instanceof HaliteSubExpression) {
+                postfixStack.push(item);
+            }
+        }
+
+        while (!temporalStack.empty()) {
+            postfixStack.push(temporalStack.pop());
+        }
+
+        return postfixStack;
+    }
+
+    private static boolean isAnyMatch(String str, String... matches) {
+        return Stream.of(matches).anyMatch(match -> StringUtils.equalsIgnoreCase(str, match));
+    }
+
+    private static Queue<Object> reverseQueue(Queue<Object> queue) {
+        Stack<Object> stack = new Stack<>();
+        queue.forEach(stack::push);
+        LinkedBlockingQueue<Object> result = new LinkedBlockingQueue<>();
+        while (!stack.isEmpty()) {
+            result.offer(stack.pop());
+        }
+        return result;
     }
 
     public static String translateFilter(String expression) {

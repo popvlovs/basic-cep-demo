@@ -1,5 +1,7 @@
 package com.hansight.util;
 
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
@@ -20,8 +22,6 @@ import java.util.stream.Stream;
  */
 public class ExpressionUtil {
 
-    private static final Logger logger = LoggerFactory.getLogger(ExpressionUtil.class);
-
     public static boolean equal(ObjectNode objA, String fieldA, ObjectNode objB, String fieldB) {
         validate(objA, fieldA, objB, fieldB);
         JsonNode nodeA = objA.findValue(fieldA);
@@ -33,6 +33,12 @@ public class ExpressionUtil {
             return false;
         }
         return StringUtils.equalsIgnoreCase(nodeA.asText(), nodeB.asText());
+    }
+
+    public static boolean equal(JSONObject data, String field, String value) {
+        validate(data, field, value);
+        String val = data.getString(field);
+        return StringUtils.equals(val, value);
     }
 
     public static boolean equal(ObjectNode data, String field, Object value) {
@@ -69,6 +75,24 @@ public class ExpressionUtil {
         return Double.compare(nodeVal, value) > 0;
     }
 
+    public static boolean gt(JSONObject data, String field, double value) {
+        validate(data, field, value);
+        Double nodeVal = data.getDouble(field);
+        if (nodeVal == null) {
+            return false;
+        }
+        return Double.compare(nodeVal, value) > 0;
+    }
+
+    public static boolean gte(JSONObject data, String field, double value) {
+        validate(data, field, value);
+        Double nodeVal = data.getDouble(field);
+        if (nodeVal == null) {
+            return false;
+        }
+        return Double.compare(nodeVal, value) >= 0;
+    }
+
     public static boolean gte(ObjectNode data, String field, double value) {
         validate(data, field, value);
         Double nodeVal = getFieldAsValue(data, field);
@@ -76,6 +100,15 @@ public class ExpressionUtil {
             return false;
         }
         return Double.compare(nodeVal, value) >= 0;
+    }
+
+    public static boolean lt(JSONObject data, String field, double value) {
+        validate(data, field, value);
+        Double nodeVal = data.getDouble(field);
+        if (nodeVal == null) {
+            return false;
+        }
+        return Double.compare(nodeVal, value) < 0;
     }
 
     public static boolean lt(ObjectNode data, String field, double value) {
@@ -87,6 +120,15 @@ public class ExpressionUtil {
         return Double.compare(nodeVal, value) < 0;
     }
 
+    public static boolean lte(JSONObject data, String field, double value) {
+        validate(data, field, value);
+        Double nodeVal = data.getDouble(field);
+        if (nodeVal == null) {
+            return false;
+        }
+        return Double.compare(nodeVal, value) <= 0;
+    }
+
     public static boolean lte(ObjectNode data, String field, double value) {
         validate(data, field, value);
         Double nodeVal = getFieldAsValue(data, field);
@@ -96,14 +138,32 @@ public class ExpressionUtil {
         return Double.compare(nodeVal, value) <= 0;
     }
 
+    public static boolean notExist(JSONObject data, String field) {
+        return !exist(data, field);
+    }
+
+    public static boolean exist(JSONObject data, String field) {
+        validate(data, field);
+        return data.containsKey(field) && data.get(field) != null;
+    }
+
     public static boolean exist(ObjectNode data, String field) {
         validate(data, field);
         JsonNode node = data.findValue(field);
-        return node == null;
+        return node != null;
     }
 
     public static boolean notExist(ObjectNode data, String field) {
         return !exist(data, field);
+    }
+
+    public static boolean like(JSONObject data, String field, String value) {
+        validate(data, field, value);
+        String fieldAsText = data.getString(field);
+        if (fieldAsText == null) {
+            return false;
+        }
+        return fieldAsText.contains(value);
     }
 
     public static boolean like(ObjectNode data, String field, String value) {
@@ -113,6 +173,16 @@ public class ExpressionUtil {
             return false;
         }
         return fieldAsText.contains(value);
+    }
+
+    public static boolean rlike(JSONObject data, String field, String value) {
+        validate(data, field, value);
+        Pattern pattern = Pattern.compile(value);
+        String fieldAsText = data.getString(field);
+        if (fieldAsText == null) {
+            return false;
+        }
+        return pattern.matcher(fieldAsText).matches();
     }
 
     public static boolean rlike(ObjectNode data, String field, String value) {
@@ -125,11 +195,24 @@ public class ExpressionUtil {
         return pattern.matcher(fieldAsText).matches();
     }
 
+    public static boolean in(JSONObject data, String field, String value) {
+        validate(data, field, value);
+        String fieldAsText = data.getString(field);
+        IntelligenceGroupUtil.IpRangeMatcher matcher = new IntelligenceGroupUtil.IpRangeMatcher(value);
+        return matcher.match(fieldAsText);
+    }
+
     public static boolean in(ObjectNode data, String field, String value) {
         validate(data, field, value);
         String fieldAsText = getFieldAsText(data, field);
         IntelligenceGroupUtil.IpRangeMatcher matcher = new IntelligenceGroupUtil.IpRangeMatcher(value);
         return matcher.match(fieldAsText);
+    }
+
+    public static boolean contain(JSONObject data, String field, Object value) {
+        validate(data, field, value);
+        JSONArray array = data.getJSONArray(field);
+        return array.stream().anyMatch(item -> Objects.equals(item, value));
     }
 
     public static boolean contain(ObjectNode data, String field, Object value) {
@@ -163,8 +246,20 @@ public class ExpressionUtil {
         return StringUtils.equals(iocMatcher, field);
     }
 
+    public static boolean match(JSONObject data, String field) {
+        validate(data, field);
+        String iocMatcher = data.getString("ioc_matcher");
+        return StringUtils.equals(iocMatcher, field);
+    }
+
     public static boolean belong(String nodeVal, String value) {
         return IntelligenceGroupUtil.contains(value, nodeVal);
+    }
+
+    public static boolean belong(JSONObject data, String field, String value) {
+        validate(data, field, value);
+        String nodeVal = data.getString(field);
+        return belong(nodeVal, value);
     }
 
     public static boolean belong(ObjectNode data, String field, String value) {
@@ -181,6 +276,14 @@ public class ExpressionUtil {
                         .reduce((a, b) -> a + ", " + b)+ "]");
             }
         }
+    }
+
+    public static String getFieldAsText(JSONObject data, String field, String defaultVal) {
+        String val = data.getString(field);
+        if (val == null) {
+            return defaultVal;
+        }
+        return val;
     }
 
     public static String getFieldAsText(ObjectNode data, String field, String defaultVal) {
@@ -255,6 +358,10 @@ public class ExpressionUtil {
         return null;
     }
 
+    public static Long getFieldAsTimestamp(JSONObject data, String field) {
+        return data.getLongValue(field);
+    }
+
     public static Long getFieldAsTimestamp(ObjectNode data, String field) {
         JsonNode node = data.findValue(field);
         if (node == null) {
@@ -264,6 +371,16 @@ public class ExpressionUtil {
     }
 
     public static String getGroupSignature(ObjectNode data, String... fields) {
+        if (fields.length == 0) {
+            return "All";
+        }
+        return Stream.of(fields)
+                .map(field -> getFieldAsText(data, field, "None"))
+                .reduce((a, b) -> a + "," + b)
+                .orElse("None");
+    }
+
+    public static String getGroupSignature(JSONObject data, String... fields) {
         if (fields.length == 0) {
             return "All";
         }

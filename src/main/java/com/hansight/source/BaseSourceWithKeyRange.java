@@ -43,7 +43,7 @@ abstract public class BaseSourceWithKeyRange<T> implements ParallelSourceFunctio
 	public void run(SourceContext<T> out) {
 		init();
 
-		int keyId = 0;
+		int keyId = 1;
 		while (--remainingEvents >= 0) {
 			T element = getElement(keyId);
 			synchronized (out.getCheckpointLock()) {

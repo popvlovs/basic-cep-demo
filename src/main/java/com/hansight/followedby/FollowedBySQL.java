@@ -27,7 +27,7 @@ public class FollowedBySQL {
                                 .version("0.10")
                                 .topic("userActionsV4")
                                 .startFromEarliest()
-                                .property("bootstrap.servers", "172.16.100.146:9092")
+                                .property("bootstrap.servers", "172.16.100.218:9092")
                                 .property("group.id", "test-consumer-group")
                 )
                 .withFormat(
@@ -63,7 +63,7 @@ public class FollowedBySQL {
                 "       B.region      AS  logout_region\n" +
                 "    ONE ROW PER MATCH\n" +
                 "    AFTER MATCH SKIP PAST LAST ROW\n" +
-                "    PATTERN (PERMUTE(A B)) WITHIN INTERVAL '3' HOUR\n" +
+                "    PATTERN (A B) WITHIN INTERVAL '3' HOUR\n" +
                 "    DEFINE\n" +
                 "        A AS A.action = 'Login',\n" +
                 "        B AS B.action = 'Logout' AND B.region <> A.region\n" +

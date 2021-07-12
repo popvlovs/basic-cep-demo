@@ -29,11 +29,11 @@ public class FastJsonSchema implements DeserializationSchema<JSONObject>, Serial
 
     @Override
     public byte[] serialize(JSONObject element) {
-        return new byte[0];
+        return element.toJSONString().getBytes();
     }
 
     @Override
     public TypeInformation<JSONObject> getProducedType() {
-        return null;
+        return TypeInformation.of(JSONObject.class);
     }
 }

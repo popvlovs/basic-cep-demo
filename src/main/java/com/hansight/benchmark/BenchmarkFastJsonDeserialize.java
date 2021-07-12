@@ -1,5 +1,6 @@
 package com.hansight.benchmark;
 
+import com.hansight.DiscardingSink;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.streaming.api.TimeCharacteristic;
@@ -39,8 +40,7 @@ public class BenchmarkFastJsonDeserialize {
                 .uid("kafka-source");
 
         stream
-                .filter(text -> StringUtils.equals(text, "None"))
-                .print();
+                .addSink(new DiscardingSink<>());
 
         env.execute("Kafka Json Deserializer");
     }
